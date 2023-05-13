@@ -36,7 +36,7 @@ async fn get_identity_keypair(identity_from_cli: &String) -> Keypair {
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
-pub async fn main() {
+pub async fn ___main() {
 
     let shred_copy_stream_service = ShredCopyStreamService::new();
 
@@ -48,7 +48,8 @@ pub async fn main() {
 
     // let join_handle = shred_copy_stream_service.start_service(shred_sender, max_slot_seen);
 
-    let mut join_handle = shred_copy_stream_service.start_service(shred_sender);
+    let estimated_dummy = Arc::new(AtomicU64::new(9999999));
+    let mut join_handle = shred_copy_stream_service.start_service(shred_sender, estimated_dummy);
 
     loop {
         select! {
@@ -72,7 +73,7 @@ pub async fn main() {
 
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
-pub async fn _main_zzzz() -> anyhow::Result<()> {
+pub async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let Args {

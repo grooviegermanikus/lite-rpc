@@ -167,7 +167,7 @@ impl LiteBridge {
 
         let (shred_sender, shred_receiver) = tokio::sync::watch::channel(None);
         let max_slot_seen = Arc::new(AtomicU64::new(0));
-        let shred_copy_stream_service = self.shred_copy_streamer.start_service(shred_sender);
+        let shred_copy_stream_service = self.shred_copy_streamer.start_service(shred_sender, self.tpu_service.get_estimated_slot_holder());
 
         // TODO use the signals
 

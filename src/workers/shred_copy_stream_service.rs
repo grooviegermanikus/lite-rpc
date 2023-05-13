@@ -35,32 +35,32 @@ impl ShredCopyStreamService {
 
     pub fn start_service(
         &self,
-        shred_sender: Sender<Option<ShredSignal>>) -> JoinHandle<anyhow::Result<()>> {
-        println!("start_service");
-        // let tx_sender = self.tx_sender.clone();
-        // let retry_after = self.retry_after;
-
-
+        shred_sender: Sender<Option<ShredSignal>>,
+        tpu_estimated_slot: Arc<AtomicU64>) -> JoinHandle<anyhow::Result<()>> {
         let join_handler =
             tokio::spawn(async move {
-            // let mut reciever = reciever;
             let listen_socket = UdpSocket::bind("0.0.0.0:7999").await?;
             let mut buf = vec![0; 2048];
             let mut max_slot_seen = 0;
+
             loop {
                 if let Ok((len, _peer)) = listen_socket.recv_from(&mut buf).await {
 
-                    let shred = Shred::new_from_serialized_shred(buf[..len].to_vec());
-                    match &shred {
+                    match Shred::new_from_serialized_shred(buf[..len].to_vec()) {
                         Ok(shred) => {
 
-                            // println!("slot: {:?}", shred.slot());
-                            // println!("shred: {:?}", shred);
+
 
                             if shred.slot() > max_slot_seen {
                                 max_slot_seen = shred.slot();
-                                shred_sender.send(Some(ShredSignal::SlotSeen(max_slot_seen))).unwrap();
+                                assert_ne!(max_slot_seen, 0, "never send the initial value");
+                                // shred_sender.send(Some(ShredSignal::SlotSeen(max_slot_seen))).unwrap();
+
+                                println!("slot from shred vs estimated slot {:?} vs {:?}",
+                                         tpu_estimated_slot.load(Relaxed),
+                                         shred.slot());
                             }
+
 
                         }
                         Err(e) => {
