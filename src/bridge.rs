@@ -13,6 +13,7 @@ use crate::{
 };
 
 use std::{ops::Deref, str::FromStr, sync::Arc, time::Duration};
+use std::sync::atomic::AtomicU64;
 
 use anyhow::bail;
 
@@ -31,6 +32,7 @@ use solana_sdk::{
     commitment_config::CommitmentConfig, hash::Hash, pubkey::Pubkey, signature::Keypair,
     transaction::VersionedTransaction,
 };
+use solana_sdk::clock::Slot;
 use solana_transaction_status::TransactionStatus;
 use tokio::{
     net::ToSocketAddrs,
@@ -163,9 +165,11 @@ impl LiteBridge {
         self.tx_replay_sender = Some(replay_sender);
 
 
-        let shred_copy_stream_service = self.shred_copy_streamer.start_service();
+        let (shred_sender, shred_receiver) = tokio::sync::watch::channel(None);
+        let max_slot_seen = Arc::new(AtomicU64::new(0));
+        let shred_copy_stream_service = self.shred_copy_streamer.start_service(shred_sender);
 
-        // TODO
+        // TODO use the signals
 
         let metrics_capture = MetricsCapture::new(self.tx_sender.clone()).capture();
         let prometheus_sync = PrometheusSync.sync(prometheus_addr);

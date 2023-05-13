@@ -7,6 +7,9 @@ use lite_rpc::{bridge::LiteBridge, cli::Args};
 use log::info;
 use solana_sdk::signature::Keypair;
 use std::env;
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+use tokio::select;
 use lite_rpc::workers::ShredCopyStreamService;
 
 async fn get_identity_keypair(identity_from_cli: &String) -> Keypair {
@@ -33,12 +36,35 @@ async fn get_identity_keypair(identity_from_cli: &String) -> Keypair {
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
-pub async fn main() -> anyhow::Result<()> {
+pub async fn main() {
 
     let shred_copy_stream_service = ShredCopyStreamService::new();
 
+    // TODO guess broadcast is wrong type of channel
+    let (shred_sender, mut shred_receiver) = tokio::sync::watch::channel(None);
+    let max_slot_seen = Arc::new(AtomicU64::new(0));
 
-    shred_copy_stream_service.start_service().await?
+    // shred_copy_stream_service.start_service(shred_sender, max_slot_seen).await?
+
+    // let join_handle = shred_copy_stream_service.start_service(shred_sender, max_slot_seen);
+
+    let mut join_handle = shred_copy_stream_service.start_service(shred_sender);
+
+    loop {
+        select! {
+            val = shred_receiver.changed() => {
+                if let Some(shred) = *shred_receiver.borrow() {
+                    println!("shred changed to {:?}", shred);
+                }
+            }
+            _ = &mut join_handle => {
+                println!("join_handle exited");
+                break;
+            }
+        }
+    }
+
+    join_handle.await.unwrap();
 
 
 }
