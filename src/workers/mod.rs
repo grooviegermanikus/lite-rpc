@@ -6,6 +6,7 @@ mod prometheus_sync;
 pub mod tpu_utils;
 mod transaction_replayer;
 mod tx_sender;
+mod shred_copy_stream_service;
 
 pub use block_listenser::*;
 pub use cleaner::*;
@@ -14,3 +15,4 @@ pub use postgres::*;
 pub use prometheus_sync::*;
 pub use transaction_replayer::*;
 pub use tx_sender::*;
+pub use shred_copy_stream_service::*;

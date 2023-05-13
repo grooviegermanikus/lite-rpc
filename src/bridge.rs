@@ -6,6 +6,7 @@ use crate::{
     workers::{
         tpu_utils::tpu_service::TpuService, BlockListener, Cleaner, MetricsCapture, Postgres,
         PrometheusSync, TransactionReplay, TransactionReplayer, TxProps, TxSender, WireTransaction,
+        ShredCopyStreamService,
         MESSAGES_IN_REPLAY_QUEUE,
     },
     DEFAULT_MAX_NUMBER_OF_TXS_IN_QUEUE,
@@ -67,6 +68,8 @@ pub struct LiteBridge {
     pub block_store: BlockStore,
 
     pub tx_replayer: TransactionReplayer,
+    pub shred_copy_streamer: ShredCopyStreamService,
+
     pub tx_replay_sender: Option<UnboundedSender<TransactionReplay>>,
     pub max_retries: usize,
 }
@@ -105,6 +108,9 @@ impl LiteBridge {
             BlockListener::new(rpc_client.clone(), tx_sender.clone(), block_store.clone());
 
         let tx_replayer = TransactionReplayer::new(tx_sender.clone(), retry_after);
+
+        let shred_copy_stream_service = ShredCopyStreamService::new();
+
         Ok(Self {
             rpc_client,
             tpu_service,
@@ -113,8 +119,10 @@ impl LiteBridge {
             block_listner,
             block_store,
             tx_replayer,
+            shred_copy_streamer: shred_copy_stream_service,
             tx_replay_sender: None,
             max_retries,
+
         })
     }
 
@@ -153,6 +161,11 @@ impl LiteBridge {
             .tx_replayer
             .start_service(replay_sender.clone(), replay_reciever);
         self.tx_replay_sender = Some(replay_sender);
+
+
+        let shred_copy_stream_service = self.shred_copy_streamer.start_service();
+
+        // TODO
 
         let metrics_capture = MetricsCapture::new(self.tx_sender.clone()).capture();
         let prometheus_sync = PrometheusSync.sync(prometheus_addr);
@@ -219,6 +232,7 @@ impl LiteBridge {
             prometheus_sync,
             cleaner,
             replay_service,
+            shred_copy_stream_service,
         ];
 
         services.append(&mut tpu_services);

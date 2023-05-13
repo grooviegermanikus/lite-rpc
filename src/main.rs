@@ -7,6 +7,7 @@ use lite_rpc::{bridge::LiteBridge, cli::Args};
 use log::info;
 use solana_sdk::signature::Keypair;
 use std::env;
+use lite_rpc::workers::ShredCopyStreamService;
 
 async fn get_identity_keypair(identity_from_cli: &String) -> Keypair {
     if let Ok(identity_env_var) = env::var("IDENTITY") {
@@ -33,6 +34,19 @@ async fn get_identity_keypair(identity_from_cli: &String) -> Keypair {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
 pub async fn main() -> anyhow::Result<()> {
+
+    let shred_copy_stream_service = ShredCopyStreamService::new();
+
+
+    shred_copy_stream_service.start_service().await?
+
+
+}
+
+
+
+#[tokio::main(flavor = "multi_thread", worker_threads = 16)]
+pub async fn _main_zzzz() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let Args {
