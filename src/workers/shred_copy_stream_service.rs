@@ -1,4 +1,5 @@
 use std::time::Duration;
+use solana_ledger::shred::Shred;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
@@ -26,14 +27,35 @@ impl ShredCopyStreamService {
         // let tx_sender = self.tx_sender.clone();
         // let retry_after = self.retry_after;
 
+
         tokio::spawn(async move {
             // let mut reciever = reciever;
             let listen_socket = UdpSocket::bind("0.0.0.0:7999").await?;
-            let mut buf = vec![0; 1024];
+            let mut buf = vec![0; 2048];
             loop {
                 if let Ok((len, peer)) = listen_socket.recv_from(&mut buf).await {
 
+
+
                     println!("got {len} bytes from {peer}");
+
+
+                    let shred = Shred::new_from_serialized_shred(buf[..len].to_vec());
+                    match shred {
+                        Ok(shred) => {
+
+
+                            println!("shred: {:?}", shred);
+                            println!("slot: {:?}", shred.slot());
+                        }
+                        Err(e) => {
+                            println!("shred error: {:?}", e);
+                        }
+
+                    }
+
+
+
                 }
 
             } // -- loop
@@ -41,3 +63,4 @@ impl ShredCopyStreamService {
         })
     }
 }
+

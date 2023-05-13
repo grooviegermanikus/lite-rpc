@@ -20,6 +20,7 @@ solana-client = "1.15.2"
 solana-net-utils = "1.15.2"
 solana-pubsub-client = "1.15.2"
 solana-streamer = "1.15.2"
+solana-ledger = "1.15.2"
 serde = { version = "1.0.160", features = ["derive"] }
 serde_json = "1.0.96"
 tokio = { version = "1.27.0", features = ["full", "fs"]}
@@ -60,6 +61,7 @@ solana-client = { workspace = true }
 solana-net-utils = { workspace = true }
 solana-pubsub-client = { workspace = true }
 solana-streamer = { workspace = true }
+solana-ledger = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -86,3 +88,5 @@ async-channel = { workspace = true }
 quinn = { workspace = true }
 chrono = { workspace = true }
 rustls = { workspace = true }
+pcap-parser = "0.14.0"
+etherparse = "0.13"
