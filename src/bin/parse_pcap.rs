@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 // Standalone binary to replay UDP traffic from a pcap file
 use pcap_parser::*;
 use pcap_parser::traits::PcapReaderIterator;
@@ -14,7 +14,8 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use solana_ledger::shred::{Error, ReedSolomonCache, Shred, ShredData};
+use solana_entry::entry::Entry;
+use solana_ledger::shred::{Error, ReedSolomonCache, Shred, ShredData, Shredder};
 use solana_sdk::clock::Slot;
 use solana_sdk::hash::Hasher;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -97,7 +98,7 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
 
     // ErasureSetId
     for ((my_slot, fec_index),cnt) in counts.iter() {
-        println!("slot {} {} count {} ...", my_slot, fec_index, cnt);
+        // println!("slot {} {} count {} ...", my_slot, fec_index, cnt);
 
         let only_my_slot = all_shreds.iter()
             .map(|s| {
@@ -109,16 +110,29 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
             .cloned()
             .collect_vec();
 
-        println!("selected {} shreds for slot {}", only_my_slot.len(), my_slot);
 
-        shreds_for_slot_and_fecindex(my_slot, only_my_slot);
+
+
+        // slot 197191944 0 count 83 ...
+        // https://explorer.solana.com/block/197191944?cluster=testnet
+        // successful transactions. 4547
+        // process transactions: 5096
+        // if *my_slot == 197191944 && *fec_index == 0 {
+        if true {
+            println!("selected {} shreds for slot {}", only_my_slot.len(), my_slot);
+            for prefix_len in (1..50) {
+                let mut first_n = only_my_slot.clone();
+                first_n.truncate(prefix_len);
+                shreds_for_slot_and_fecindex(my_slot, first_n);
+            }
+        }
 
 
      } // -- for slots
 
 }
 
-fn shreds_for_slot_and_fecindex(my_slot: &Slot, only_my_slot: Vec<Shred>) {
+fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>) {
     let reed_solomon_cache = ReedSolomonCache::default();
 
 
@@ -138,9 +152,9 @@ fn shreds_for_slot_and_fecindex(my_slot: &Slot, only_my_slot: Vec<Shred>) {
     };
 
 
-    let mut collector: Vec<u8> = Vec::new();
+    let mut collector: HashMap<u32, &Shred> = HashMap::new();
     let mut indizes_seen: HashSet<u32> = HashSet::new();
-    let mut last_in_slot_index = None;
+    let mut last_index = None;
 
     only_my_slot
         .iter()
@@ -154,51 +168,80 @@ fn shreds_for_slot_and_fecindex(my_slot: &Slot, only_my_slot: Vec<Shred>) {
             // println!("shred: {:?}", s);
 
             // TODO check vs s.last_in_slot()
-            if s.data_complete() {
-                last_in_slot_index = Some(s.index());
+            // see deshred for logic
+            if s.data_complete() || s.last_in_slot() {
+                last_index = Some(s.index());
             }
 
             match s {
                 Shred::ShredData(_) => {
-                    collector.extend_from_slice(s.bytes_to_store());
+                    // FIXME bytes_to_store is maybe wrong
 
+                    // let shred_bufs: Vec<_> = shreds.iter().map(Shred::payload).cloned().collect();
+
+                    collector.insert(s.index(), s);
                     indizes_seen.insert(s.index());
 
                     // let Shred::ShredData(daaaata) = s else { todo!(); };
                     // println!("daaaata {:?}", daaaata);
                 }
                 Shred::ShredCode(_) => {
-                    collector.extend_from_slice(s.bytes_to_store());
+                    // TODO check if we should do that?
+                    // collector.insert(s.index(), s);
                     indizes_seen.insert(s.index());
                 }
             }
         });
 
-    println!("total data so far {}", collector.len());
+    println!("indizes_seen {:?}", indizes_seen);
 
-    println!("last = {last_in_slot_index:?}");
+    println!("last = {last_index:?}");
     println!("indizes_seen(sorted) {:?}", indizes_seen.iter().sorted().collect_vec());
-    let complete = check_if_complete(&indizes_seen, last_in_slot_index);
+    let complete = check_if_complete(&indizes_seen, last_index);
     println!("completed status {:?}", complete);
 
-    // indizes_seen.sort();
+    let attempt: Result<usize, Error> = Shredder::deshred(only_my_slot.as_slice()).map(|data| data.len());
+    println!("shredder recontructed size {:?}", attempt);
 
-    println!("indizes_seen {:?}", indizes_seen);
+    println!("total data so far {}", collector.len());
+
+    if let Complete(last_index) = complete {
+
+        let mut buffer = Vec::new();
+
+        (0..=last_index).map(|i| {
+            let shred = collector.get(&i).expect(format!("no shred for index {i}").as_str());
+            *shred
+        }).map(Shred::payload).cloned()
+        .for_each(|data| {
+            // let shred_bufs: Vec<_> = shreds.iter().map(Shred::payload).cloned().collect();
+            buffer.extend_from_slice(&data);
+        });
+
+        println!("buffer size {}", buffer.len());
+        println!("decoding ... {:?}", entries_from_blockdata(buffer));
+    }
+
+
+}
+
+fn entries_from_blockdata(data: Vec<u8>) -> bincode::Result<Vec<Entry>> {
+    bincode::deserialize::<Vec<Entry>>(&data)
 }
 
 #[derive(Debug)]
 enum CompletionState {
-    Complete(u32), // OK
+    Complete(u32), // OK, last_index
     DataCompleteNotYetSeen(u32),
     // check for size of index array failed
     MissingDataBySize(u32,u32), // (seen, last_index) - note: last_index is rangge-inclusive
     // check if all indices are there failed
-    MissingDataByIndex,
+    MissingDataByIndex
 
 }
-fn check_if_complete(all_seen: &HashSet<u32>, last_in_slot_index: Option<u32>) -> CompletionState {
+fn check_if_complete(all_seen: &HashSet<u32>, last_index: Option<u32>) -> CompletionState {
 
-    match last_in_slot_index {
+    match last_index {
         None => DataCompleteNotYetSeen(all_seen.len() as u32),
         Some(last_index) => {
 
