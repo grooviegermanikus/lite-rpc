@@ -208,31 +208,58 @@ pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>, C
     let complete = check_if_complete(&indizes_seen, last_index);
     debug!("completed status {:?}", complete);
 
-    let attempt: Result<usize, Error> = Shredder::deshred(only_my_slot.as_slice()).map(|data| data.len());
-    debug!("shredder recontructed size {:?}", attempt);
 
     debug!("total data so far {}", collector.len());
 
     if let Complete(last_index) = complete {
 
-        let mut buffer = Vec::new();
+        let attempt: Result<usize, Error> = Shredder::deshred(only_my_slot.as_slice()).map(|data| data.len());
+        debug!("shredder recontructed size {:?}", attempt);
+        let decode_using_mystuff;
+        {
+            let mut buffer = Vec::new();
 
-        (0..=last_index).map(|i| {
-            let shred = collector.get(&i).expect(format!("no shred for index {i}").as_str());
-            *shred
-        }).map(|s| s.data().unwrap())
-        .for_each(|data| {
-            // let shred_bufs: Vec<_> = shreds.iter().map(Shred::payload).cloned().collect();
-            buffer.extend_from_slice(&data);
-        });
+            (0..=last_index).map(|i| {
+                let shred = collector.get(&i).expect(format!("no shred for index {i}").as_str());
+                *shred
+            }).map(|s| s.data().unwrap())
+                .for_each(|data| {
+                    // let shred_bufs: Vec<_> = shreds.iter().map(Shred::payload).cloned().collect();
+                    buffer.extend_from_slice(&data);
+                });
 
-        info!("buffer size {}", buffer.len());
-        let decode = entries_from_blockdata(buffer);
-        debug!("decoding ... {:?}", decode);
-        if decode.is_ok() {
-            info!("decodabled!");
-            CNT_DECODED.fetch_add(1, Ordering::Relaxed);
+            decode_using_mystuff = entries_from_blockdata(buffer);
+            debug!("decoding_groovie ... {:?}", decode_using_mystuff);
+            if decode_using_mystuff.is_ok() {
+                info!("decodabled_groovie!");
+                CNT_DECODED.fetch_add(1, Ordering::Relaxed);
+            }
         }
+
+        let decode_using_shredder;
+        {
+            // sort consecutive sequence by index
+            let asdfsdfafsd = (0..=last_index).map(|i| {
+                let shred = collector.get(&i).expect(format!("no shred for index {i}").as_str());
+                shred.clone()
+            }).cloned().collect_vec();
+
+
+            let deshredded = Shredder::deshred(asdfsdfafsd.as_slice()).expect("Must deshred");
+
+            info!("buffer size {}", deshredded.len());
+            decode_using_shredder = entries_from_blockdata(deshredded);
+            debug!("decoding_shredder ... {:?}", decode_using_shredder);
+            if decode_using_shredder.is_ok() {
+                info!("decodabled_shredder!");
+                CNT_DECODED.fetch_add(1, Ordering::Relaxed);
+            }
+
+        }
+
+
+        assert_eq!(decode_using_shredder.is_ok(), decode_using_mystuff.is_ok());
+
     }
 
 
