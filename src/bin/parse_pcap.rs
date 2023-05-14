@@ -30,7 +30,7 @@ use crate::CompletionState::{Complete, DataCompleteNotYetSeen, MissingDataByInde
 
 fn main() {
 
-    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
 
     let path = "/Users/stefan/mango/projects/scan-shreds/shreds-big-sunday.pcap";
@@ -101,6 +101,8 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
     let counts = all_shreds.iter().map(|s| (s.slot(), s.fec_set_index()) ).counts();
     println!("counts {:?}", counts);
 
+    let CNT_DECODED = AtomicU64::new(0);
+
     // ErasureSetId
     for ((my_slot, fec_index),cnt) in counts.iter() {
         // println!("slot {} {} count {} ...", my_slot, fec_index, cnt);
@@ -128,21 +130,19 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
             for prefix_len in (1..50) {
                 let mut first_n = only_my_slot.clone();
                 first_n.truncate(prefix_len);
-                shreds_for_slot_and_fecindex(my_slot, first_n);
+                shreds_for_slot_and_fecindex(my_slot, first_n, &CNT_DECODED);
             }
         } else {
-            shreds_for_slot_and_fecindex(my_slot, only_my_slot);
+            shreds_for_slot_and_fecindex(my_slot, only_my_slot, &CNT_DECODED);
         }
 
 
      } // -- for slots
 
-    println!("could decode {}", CNT_DECODED.load(Ordering::Relaxed));
+    println!("could decode {}", CNT_DECODED.load(Relaxed));
 }
 
-const CNT_DECODED: AtomicU64 = AtomicU64::new(0);
-
-pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>) {
+pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>, CNT_DECODED: &AtomicU64) {
     let reed_solomon_cache = ReedSolomonCache::default();
 
 
@@ -228,8 +228,9 @@ pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>) {
 
         info!("buffer size {}", buffer.len());
         let decode = entries_from_blockdata(buffer);
-        info!("decoding ... {:?}", decode);
+        debug!("decoding ... {:?}", decode);
         if decode.is_ok() {
+            info!("decodabled!");
             CNT_DECODED.fetch_add(1, Ordering::Relaxed);
         }
     }
