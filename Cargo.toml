@@ -20,7 +20,7 @@ solana-client = "1.15.2"
 solana-net-utils = "1.15.2"
 solana-pubsub-client = "1.15.2"
 solana-streamer = "1.15.2"
-solana-ledger = "1.15.2"
+solana-ledger = { version = "1.15.2", path = "../solana/ledger" }
 solana-account-decoder = "1.15.2"
 solana-vote-program = "1.15.2"
 serde = { version = "1.0.160", features = ["derive"] }
@@ -49,6 +49,7 @@ dotenv = "0.15.0"
 async-channel = "1.8.0"
 quinn = "0.9.3"
 rustls = { version = "=0.20.6", default-features = false }
+itertools = "0.10.1"
 
 [dev-dependencies]
 bench = { path = "./bench" }
@@ -94,3 +95,5 @@ chrono = { workspace = true }
 rustls = { workspace = true }
 pcap-parser = "0.14.0"
 etherparse = "0.13"
+itertools = "0.10.1"
+
