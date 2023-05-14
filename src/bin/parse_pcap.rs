@@ -9,10 +9,12 @@ use etherparse::IpNumber::Udp;
 use etherparse::{SlicedPacket, TransportSlice};
 
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
+use env_logger::Env;
 use itertools::Itertools;
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use solana_entry::entry::Entry;
 use solana_ledger::shred::{Error, ReedSolomonCache, Shred, ShredData, Shredder};
@@ -28,9 +30,12 @@ use crate::CompletionState::{Complete, DataCompleteNotYetSeen, MissingDataByInde
 
 fn main() {
 
+    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
- let file = File::open("/Users/stefan/mango/projects/scan-shreds/shreds-big-sunday.pcap").unwrap();
-    let mut num_blocks = 0;
+
+    let path = "/Users/stefan/mango/projects/scan-shreds/shreds-big-sunday.pcap";
+    let file = File::open(path).unwrap();
+    let mut num_packets = 0;
     let mut reader = LegacyPcapReader::new(65536, file).expect("PcapNGReader");
     let mut all_shreds = Vec::with_capacity(10000);
     loop {
@@ -58,7 +63,7 @@ fn main() {
                                     }
                                 }
 
-                                num_blocks += 1;
+                                num_packets += 1;
                             }
                         }
 
@@ -71,7 +76,7 @@ fn main() {
                 reader.consume(offset);
             },
             Err(PcapError::Eof) => {
-                println!("EOF - read {num_blocks} blocks");
+                println!("EOF - read {num_packets} blocks");
                 break;
             },
             Err(PcapError::Incomplete) => {
@@ -118,21 +123,26 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
         // successful transactions. 4547
         // process transactions: 5096
         // if *my_slot == 197191944 && *fec_index == 0 {
-        if true {
-            println!("selected {} shreds for slot {}", only_my_slot.len(), my_slot);
+        println!("selected {} shreds for slot {}", only_my_slot.len(), my_slot);
+        if false {
             for prefix_len in (1..50) {
                 let mut first_n = only_my_slot.clone();
                 first_n.truncate(prefix_len);
                 shreds_for_slot_and_fecindex(my_slot, first_n);
             }
+        } else {
+            shreds_for_slot_and_fecindex(my_slot, only_my_slot);
         }
 
 
      } // -- for slots
 
+    println!("could decode {}", CNT_DECODED.load(Ordering::Relaxed));
 }
 
-fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>) {
+const CNT_DECODED: AtomicU64 = AtomicU64::new(0);
+
+pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>) {
     let reed_solomon_cache = ReedSolomonCache::default();
 
 
@@ -142,24 +152,24 @@ fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>) {
     // return `Error::TooFewShardsPresent` when there are not enough shards for reconstruction.
     let recovered = match solana_ledger::shred::recover(only_my_slot.clone(), &reed_solomon_cache) {
         Ok(recovered_shreds) => {
-            println!("recovered {:?} shreds from {}", recovered_shreds.len(), only_my_slot.len());
+            debug!("recovered {:?} shreds from {}", recovered_shreds.len(), only_my_slot.len());
             recovered_shreds
         }
         Err(err) => {
-            println!("recover2 error {:?}", err);
+            debug!("recover2 error {:?}", err);
             vec![]
         }
     };
 
 
     let mut collector: HashMap<u32, &Shred> = HashMap::new();
+    // TDOO redundant
     let mut indizes_seen: HashSet<u32> = HashSet::new();
     let mut last_index = None;
 
     only_my_slot
         .iter()
         .chain(recovered.iter())
-        .sorted_by_key(|s| s.index())
         .for_each(|s| {
             // let mut hasher = Hasher::default();
             // hasher.hash(&s.bytes_to_store());
@@ -177,8 +187,6 @@ fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>) {
                 Shred::ShredData(_) => {
                     // FIXME bytes_to_store is maybe wrong
 
-                    // let shred_bufs: Vec<_> = shreds.iter().map(Shred::payload).cloned().collect();
-
                     collector.insert(s.index(), s);
                     indizes_seen.insert(s.index());
 
@@ -188,22 +196,22 @@ fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>) {
                 Shred::ShredCode(_) => {
                     // TODO check if we should do that?
                     // collector.insert(s.index(), s);
-                    indizes_seen.insert(s.index());
+                    // indizes_seen.insert(s.index());
                 }
             }
         });
 
-    println!("indizes_seen {:?}", indizes_seen);
+    debug!("indizes_seen {:?}", indizes_seen);
 
-    println!("last = {last_index:?}");
-    println!("indizes_seen(sorted) {:?}", indizes_seen.iter().sorted().collect_vec());
+    debug!("last = {last_index:?}");
+    debug!("indizes_seen(sorted) {:?}", indizes_seen.iter().sorted().collect_vec());
     let complete = check_if_complete(&indizes_seen, last_index);
-    println!("completed status {:?}", complete);
+    debug!("completed status {:?}", complete);
 
     let attempt: Result<usize, Error> = Shredder::deshred(only_my_slot.as_slice()).map(|data| data.len());
-    println!("shredder recontructed size {:?}", attempt);
+    debug!("shredder recontructed size {:?}", attempt);
 
-    println!("total data so far {}", collector.len());
+    debug!("total data so far {}", collector.len());
 
     if let Complete(last_index) = complete {
 
@@ -212,14 +220,18 @@ fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>) {
         (0..=last_index).map(|i| {
             let shred = collector.get(&i).expect(format!("no shred for index {i}").as_str());
             *shred
-        }).map(Shred::payload).cloned()
+        }).map(|s| s.data().unwrap())
         .for_each(|data| {
             // let shred_bufs: Vec<_> = shreds.iter().map(Shred::payload).cloned().collect();
             buffer.extend_from_slice(&data);
         });
 
-        println!("buffer size {}", buffer.len());
-        println!("decoding ... {:?}", entries_from_blockdata(buffer));
+        info!("buffer size {}", buffer.len());
+        let decode = entries_from_blockdata(buffer);
+        info!("decoding ... {:?}", decode);
+        if decode.is_ok() {
+            CNT_DECODED.fetch_add(1, Ordering::Relaxed);
+        }
     }
 
 
@@ -273,10 +285,10 @@ fn use_packet(eth: SlicedPacket) {
             // println!("got shred {:?}", shred);
             match solana_ledger::shred::recover(vec![], &reed_solomon_cache) {
                 Ok(recovered_shreds) => {
-                    println!("recovered {:?} shreds", recovered_shreds);
+                    debug!("recovered {:?} shreds", recovered_shreds);
                 }
                 Err(err) => {
-                    println!("recover1 error {:?}", err);
+                    warn!("recover1 error {:?}", err);
                 }
             }
             // parse_sanitized_vote_transactio(&shred.payload);
