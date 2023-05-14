@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 // Standalone binary to replay UDP traffic from a pcap file
 use pcap_parser::*;
 use pcap_parser::traits::PcapReaderIterator;
@@ -92,10 +93,9 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
 
 
     let counts = all_shreds.iter().map(|s| (s.slot(), s.fec_set_index()) ).counts();
-    let winner = counts.iter().max_by_key((|s| s.1)).unwrap();
     println!("counts {:?}", counts);
-    println!("winner {:?}", winner);
 
+    // ErasureSetId
     for ((my_slot, fec_index),cnt) in counts.iter() {
         println!("slot {} {} count {} ...", my_slot, fec_index, cnt);
 
@@ -130,7 +130,7 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
 
 
         let mut collector: Vec<u8> = Vec::new();
-        let mut indizes_seen: Vec<u32> = Vec::new();
+        let mut indizes_seen: HashSet<u32> = HashSet::new();
         let mut last_in_slot_index = None;
 
         only_my_slot
@@ -152,14 +152,15 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
                 match s {
                     Shred::ShredData(_) => {
                         collector.extend_from_slice(s.bytes_to_store());
-                        indizes_seen.push(s.index());
+
+                        indizes_seen.insert(s.index());
 
                         // let Shred::ShredData(daaaata) = s else { todo!(); };
                         // println!("daaaata {:?}", daaaata);
                     }
                     Shred::ShredCode(_) => {
                         collector.extend_from_slice(s.bytes_to_store());
-                        indizes_seen.push(s.index());
+                        indizes_seen.insert(s.index());
                     }
                 }
 
@@ -173,8 +174,7 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
             }
             Some(last) => {
                 println!("last = {}", last);
-                indizes_seen.sort();
-                println!("indizes_seen {:?}", indizes_seen);
+                println!("indizes_seen(sorted) {:?}", indizes_seen.iter().sorted().collect_vec());
                 let complete = check_if_complete(&indizes_seen, last);
                 println!("completed {:?}", complete);
             }
@@ -220,14 +220,13 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
 
 }
 
-fn check_if_complete(all_seen: &Vec<u32>, last_index: u32) -> bool {
+fn check_if_complete(all_seen: &HashSet<u32>, last_index: u32) -> bool {
 
-    if all_seen.len() != last_index as usize {
+    if all_seen.len() != 1 + last_index as usize {
         return false;
     }
 
-
-    return (0..last_index).all(|i| all_seen.contains(&i));
+    return (0..=last_index).all(|i| all_seen.contains(&i));
 }
 
 
