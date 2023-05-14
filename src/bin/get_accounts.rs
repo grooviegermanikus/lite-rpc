@@ -34,19 +34,33 @@ async fn main() -> anyhow::Result<()> {
     };
 
 
-    let rpsee = jsonrpsee::http_client::HttpClientBuilder::default()
-        .max_response_size(1 * 1024 * 1024 * 1024)
-        .build(url)
-        .unwrap();
+    // let rpsee = jsonrpsee::http_client::HttpClientBuilder::default()
+    //     .max_response_size(1 * 1024 * 1024 * 1024)
+    //     .build(url)
+    //     .unwrap();
+    //
+    // let ressss: OptionalContext<Vec<RpcKeyedAccount>> = rpsee.request(RpcRequest::GetProgramAccounts.to_string().as_str(),
+    //                       rpc_params!(pubkey.to_string(), config)).await.unwrap();
+    //
+    //
+    // if let OptionalContext::Context(response) = ressss {
+    //     println!("context: {:?}", response.context.slot);
+    // }
 
-    let ressss: OptionalContext<Vec<RpcKeyedAccount>> = rpsee.request(RpcRequest::GetProgramAccounts.to_string().as_str(),
-                          rpc_params!(pubkey.to_string(), config)).await.unwrap();
+    let slot = rpc_client.get_slot().await?;
+    let epoch_schedule = rpc_client.get_epoch_schedule().await?;
+    let asdf = rpc_client.get_leader_schedule(Some(197145906)).await?;
+    epoch_schedule.get_epoch_and_slot_index(197145906);
 
+    // current epoc
+    let res_vote_accounts = rpc_client.get_vote_accounts().await?;
 
-    if let OptionalContext::Context(response) = ressss {
-        println!("context: {:?}", response.context.slot);
+    for acc in &res_vote_accounts.current {
+        // println!("vote account: {:?}", acc.node_pubkey);
+        // println!("vote account: {:?}", acc.activated_stake);
+        // println!("vote account: {:?}", acc.epoch_vote_account);
     }
-
+    print!("vote accounts: {:?}", &res_vote_accounts.current.len());
 
     // let response = rpc_client
     //     .send::<OptionalContext<Vec<RpcKeyedAccount>>>(
