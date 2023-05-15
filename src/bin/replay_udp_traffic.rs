@@ -13,7 +13,7 @@ fn main() {
     let target: SocketAddr = "127.0.0.1:7999".parse().expect("parse");
 
     loop {
-     let file = File::open("/Users/stefan/mango/projects/scan-shreds/shreds.pcap").unwrap();
+     let file = File::open("/Users/stefan/mango/projects/scan-shreds/shreds-big-sunday.pcap").unwrap();
         let mut num_blocks = 0;
         let mut reader = LegacyPcapReader::new(65536, file).expect("PcapNGReader");
         loop {

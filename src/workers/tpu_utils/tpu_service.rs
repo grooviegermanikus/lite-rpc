@@ -23,6 +23,7 @@ use std::{
         Arc,
     },
 };
+use solana_sdk::hash::Hash;
 use tokio::{
     sync::RwLock,
     task::JoinHandle,
@@ -71,6 +72,7 @@ pub struct TpuService {
     tpu_connection_manager: Arc<TpuConnectionManager>,
     identity: Arc<Keypair>,
     identity_stakes: Arc<RwLock<IdentityStakes>>,
+    vote_accounts_stakes: Arc<RwLock<VoteStakingInfo>>,
     txs_sent_store: Arc<DashMap<String, TxProps>>,
 }
 
@@ -94,6 +96,23 @@ impl Default for IdentityStakes {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct VoteStakingInfo {
+    stake_per_vote_account: HashMap<String, u64>,
+    // redundant
+    total_stake: u64,
+}
+
+impl Default for VoteStakingInfo {
+    fn default() -> Self {
+        Self {
+            stake_per_vote_account: HashMap::new(),
+            total_stake: 0,
+        }
+    }
+}
+
 
 impl TpuService {
     pub async fn new(
@@ -127,6 +146,7 @@ impl TpuService {
             tpu_connection_manager: Arc::new(tpu_connection_manager),
             identity,
             identity_stakes: Arc::new(RwLock::new(IdentityStakes::default())),
+            vote_accounts_stakes: Arc::new(RwLock::new(VoteStakingInfo::default())),
             txs_sent_store,
         })
     }
@@ -142,8 +162,8 @@ impl TpuService {
 
         // update stakes for identity
         // update stakes for the identity
+        let vote_accounts = self.rpc_client.get_vote_accounts().await?;
         {
-            let vote_accounts = self.rpc_client.get_vote_accounts().await?;
             let map_of_stakes: HashMap<String, u64> = vote_accounts
                 .current
                 .iter()
@@ -176,6 +196,30 @@ impl TpuService {
                 *lock = identity_stakes;
             }
         }
+
+        // update stakes for all known vote accounts
+        {
+            let map_of_stakes: HashMap<String, u64> = vote_accounts
+                .current
+                .iter()
+                .filter(|x| x.epoch_vote_account)
+                .map(|x| (x.node_pubkey.clone(), x.activated_stake))
+                .collect();
+
+            let total_stake = vote_accounts.current.iter().map(|x| x.activated_stake).sum();
+
+            info!(
+                    "All vote accounts' stakes {}, total_stake {}",
+                    total_stake,
+                    map_of_stakes.len(),
+                );
+            let mut lock = self.vote_accounts_stakes.write().await;
+            *lock = VoteStakingInfo {
+                stake_per_vote_account: map_of_stakes,
+                total_stake,
+            };
+        }
+
         Ok(())
     }
 
@@ -451,4 +495,9 @@ impl TpuService {
     pub fn get_estimated_slot_holder(&self) -> Arc<AtomicU64> {
         self.estimated_slot.clone()
     }
+
+    pub fn get_vote_accounts_stakes(&self) -> Arc<RwLock<VoteStakingInfo>> {
+        self.vote_accounts_stakes.clone()
+    }
+
 }

@@ -1,5 +1,6 @@
 use std::time::Duration;
 use anyhow::Context;
+use itertools::Itertools;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::{http_client, rpc_params};
 use serde_json::json;
@@ -55,11 +56,23 @@ async fn main() -> anyhow::Result<()> {
     // current epoc
     let res_vote_accounts = rpc_client.get_vote_accounts().await?;
 
-    for acc in &res_vote_accounts.current {
-        // println!("vote account: {:?}", acc.node_pubkey);
-        // println!("vote account: {:?}", acc.activated_stake);
-        // println!("vote account: {:?}", acc.epoch_vote_account);
+    let total_stake = res_vote_accounts.current.iter().map(|acc| acc.activated_stake).sum::<u64>();
+
+    let topn_count = 30;
+
+    // confirmaation threshold 0.7
+    let top_n_validators =
+        res_vote_accounts.current.iter().sorted_by_key(|acc| acc.activated_stake).rev().take(topn_count).collect_vec();
+
+    let top_n_stake = top_n_validators.iter().map(|acc| acc.activated_stake).sum::<u64>();
+
+    for acc in top_n_validators {
+
+        println!("vote account: {:?} {:?}", acc.node_pubkey,  acc.activated_stake);
     }
+
+    println!("total stake: {:?} topn stake: {:?} ratio {:?}", total_stake, top_n_stake, top_n_stake as f64 / total_stake as f64);
+
     print!("vote accounts: {:?}", &res_vote_accounts.current.len());
 
     // let response = rpc_client

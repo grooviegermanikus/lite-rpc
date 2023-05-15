@@ -96,7 +96,7 @@ pub fn shreds_for_slot_and_fecindex(only_my_slot: Vec<Shred>, CNT_DECODED: &Atom
     debug!("completed status {:?}", complete);
 
 
-    debug!("total data so far {}", collector.len());
+    debug!("total data so {}", collector.len());
 
     if let Complete(last_index) = complete {
 
@@ -122,7 +122,7 @@ pub fn shreds_for_slot_and_fecindex(only_my_slot: Vec<Shred>, CNT_DECODED: &Atom
 
             let votes = inspect_entries(entries);
             for vote in votes {
-                println!("voted by {:?}", vote.voter)
+                println!("block {:?} has been voted by {:?}", vote.block_hash, vote.voter)
             }
         }
 
@@ -136,7 +136,7 @@ struct Vote {
     pub voter: Pubkey,
     pub timestamp: Option<UnixTimestamp>,
     // signature of the bank's state at the last slot
-    pub hash: Hash,
+    pub block_hash: Hash,
 }
 
 fn entries_from_blockdata_votes(data: Vec<u8>) -> bincode::Result<Vec<Entry>> {
@@ -164,14 +164,14 @@ fn inspect_entries(entries: Vec<Entry>) -> Vec<Vote> {
                             //  1. `[SIGNER]` Vote authority
                             voter: account_keys[compiled_instruction.accounts[1] as usize],
                             timestamp: vote.timestamp,
-                            hash: vote.hash,
+                            block_hash: vote.hash,
                         }),
                         // new vote instruction - see  https://forum.solana.com/t/feature-compact-vote-state-1-14-17/174
                         VoteInstruction::CompactUpdateVoteState(vote) => Some(Vote {
                             //  1. `[SIGNER]` Vote authority
                             voter: account_keys[compiled_instruction.accounts[1] as usize],
                             timestamp: vote.timestamp,
-                            hash: vote.hash,
+                            block_hash: vote.hash,
                         }),
                         _ => None,
                     }

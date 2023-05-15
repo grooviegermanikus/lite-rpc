@@ -41,7 +41,7 @@ use lite_rpc::shred_scanner::vote_accounts_stakes::load_votestuff;
 #[tokio::main]
 async fn main() {
 
-    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let staking_info = load_votestuff().await.expect("could not load stakes");
 
 
