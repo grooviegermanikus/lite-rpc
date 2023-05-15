@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt::{Debug, Formatter};
 // Standalone binary to replay UDP traffic from a pcap file
 use pcap_parser::*;
 use pcap_parser::traits::PcapReaderIterator;
@@ -103,20 +104,35 @@ async fn main() {
 
 }
 
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub(crate) struct ErasureSetId(Slot, /*fec_set_index:*/ u32);
 
-fn process_all_shreds(all_shreds: Vec<Shred>) {
+impl From<&Shred> for ErasureSetId {
+    fn from(s: &Shred) -> Self {
+        ErasureSetId(s.slot(), s.fec_set_index())
+    }
+}
+
+impl Debug for ErasureSetId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "slot {} fec_set_index {}", self.0, self.1)
+    }
+}
+
+
+pub fn process_all_shreds(all_shreds: Vec<Shred>) {
     println!("processing {} shreds", all_shreds.len());
 
     // tuple (slot, fec_set_index) ErasureSetId: see shred.rs: Tuple which identifies erasure coding set that the shred belongs to
 
-    let counts = all_shreds.iter().map(|s| (s.slot(), s.fec_set_index()) ).counts();
+    let counts = all_shreds.iter().map(ErasureSetId::from).counts();
     println!("counts {:?}", counts);
 
     let CNT_DECODED = AtomicU64::new(0);
 
     // ErasureSetId
-    for ((my_slot, fec_index), cnt) in counts.iter() {
-        println!("slot {} fec_set_index {} count {} ...", my_slot, fec_index, cnt);
+    for (esi, cnt) in counts.iter() {
+        println!("{:?} count {} ...", esi, cnt);
 
         let only_my_slot = all_shreds.iter()
             .map(|s| {
@@ -124,7 +140,7 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
                 // println!("index {}", s.index());
                 s
             })
-            .filter(|s| s.slot() == *my_slot && s.fec_set_index() == *fec_index)
+            .filter(|s| ErasureSetId::from(*s) == *esi)
             .cloned()
             .collect_vec();
 
@@ -136,15 +152,15 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
         // successful transactions. 4547
         // process transactions: 5096
         // if *my_slot == 197191944 && *fec_index == 0 {
-        println!("selected {} shreds for slot {}", only_my_slot.len(), my_slot);
+        println!("selected {} shreds for {:?}", only_my_slot.len(), esi);
         if false {
             for prefix_len in (1..50) {
                 let mut first_n = only_my_slot.clone();
                 first_n.truncate(prefix_len);
-                shreds_for_slot_and_fecindex(my_slot, first_n, &CNT_DECODED);
+                shreds_for_slot_and_fecindex(first_n, &CNT_DECODED);
             }
         } else {
-            shreds_for_slot_and_fecindex(my_slot, only_my_slot, &CNT_DECODED);
+            shreds_for_slot_and_fecindex(only_my_slot, &CNT_DECODED);
         }
 
 
@@ -153,7 +169,7 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
     println!("could decode {}", CNT_DECODED.load(Relaxed));
 }
 
-pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>, CNT_DECODED: &AtomicU64) {
+pub fn shreds_for_slot_and_fecindex(only_my_slot: Vec<Shred>, CNT_DECODED: &AtomicU64) {
     // TODO make this more global (wee window_service - the cache is a singleton)
     let reed_solomon_cache = ReedSolomonCache::default();
 
