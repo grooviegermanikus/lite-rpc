@@ -33,12 +33,12 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::watch::Sender;
 use tokio::task::JoinHandle;
 use tokio::time;
-use lite_rpc::shred_scanner::construct_entries::{extract_votes_from_entries, extract_entries_from_complete_slots, shreds_for_slot_and_fecindex};
+use lite_rpc::shred_scanner::construct_entries::{extract_votes_from_entries, extract_entries_from_complete_slots, shreds_for_slot_and_fecindex, Vote};
 use lite_rpc::shred_scanner::construct_entries::CompletionState::Complete;
 use lite_rpc::shred_scanner::types::ErasureSetId;
 
 
-use lite_rpc::shred_scanner::vote_accounts_stakes::load_votestuff;
+use lite_rpc::shred_scanner::vote_accounts_stakes::{load_votestuff, StakingInfo};
 
 #[tokio::main]
 async fn main() {
@@ -47,8 +47,8 @@ async fn main() {
     let staking_info = load_votestuff().await.expect("could not load stakes");
 
 
-
-    let path = "/Users/stefan/mango/projects/scan-shreds/shreds-big-sunday.pcap";
+    // let path = "/Users/stefan/mango/projects/scan-shreds/shreds-big-sunday.pcap";
+    let path = "/Users/stefan/mango/projects/scan-shreds/shreds-big-tuesday.pcap";
     let file = File::open(path).unwrap();
     let mut num_packets = 0;
     let mut reader = LegacyPcapReader::new(65536, file).expect("PcapNGReader");
@@ -99,18 +99,20 @@ async fn main() {
     }
 
 
-    process_all_shreds(&all_shreds);
+    let mut latest_vote_per_voter = HashMap::new();
+    process_all_shreds(&all_shreds, &staking_info, &mut latest_vote_per_voter);
 
 
 }
 
-pub fn process_all_shreds(all_shreds: &Vec<Shred>) {
+pub fn process_all_shreds(all_shreds: &Vec<Shred>, staking_info: &StakingInfo, latest_vote_per_voter: &mut HashMap<Pubkey, Vote>) {
     println!("processing {} shreds", all_shreds.len());
 
     let counts = all_shreds.iter().map(ErasureSetId::from).counts();
     println!("counts {:?}", counts);
 
     let CNT_DECODED = AtomicU64::new(0);
+
 
     // ErasureSetId
     for (esi, cnt) in counts.iter() {
@@ -133,14 +135,45 @@ pub fn process_all_shreds(all_shreds: &Vec<Shred>) {
             let entries = extract_entries_from_complete_slots(collector, last_index);
             println!("got {} entries", entries.len());
             let votes = extract_votes_from_entries(entries);
-            for vote in votes {
-                println!("vote: {:?}", vote);
+            for vote in &votes {
+                let last_vote = latest_vote_per_voter.get_mut(&vote.voter);
+                if let Some(last_vote) = last_vote {
+                    if last_vote.slot < vote.slot {
+                        *last_vote = vote.clone();
+                    }
+                } else {
+                    latest_vote_per_voter.insert(vote.voter, vote.clone());
+                }
+                // println!("vote: {:?}", vote);
             }
+            let rooted_slot = calc_rooted_slot(&votes, latest_vote_per_voter, staking_info);
+            println!("rooted slot: {:?}", rooted_slot);
+
+
         }
 
 
      } // -- for slots
 
     println!("could decode {}", CNT_DECODED.load(Relaxed));
+}
+
+fn calc_rooted_slot(_votes: &Vec<Vote>, latest_vote_per_voter: &HashMap<Pubkey, Vote>, staking_info: &StakingInfo) -> Option<(Slot, f64)> {
+
+    // 1. voter -> stake
+    // 2. voter -> max root slot
+
+
+    // let stakes_per_root_slot = votes.iter().map(|vote| (vote.root_slot, staking_info.get_stake(&vote.voter))).into_grouping_map().sum();
+    let stakes_per_root_slot = latest_vote_per_voter.iter().map(|(voter, vote)| (vote.root_slot, staking_info.get_stake(voter))).into_grouping_map().sum();
+    let total_stake = staking_info.get_total_stake() as f64;
+    let majority_stake = total_stake * 0.067;
+
+    // println!("stakes_per_root_slot {:?}", stakes_per_root_slot);
+    stakes_per_root_slot.iter().sorted_by_key(|(slot, _)| *slot)
+        .rfind(|(slot, stake)| **stake as f64 > majority_stake)
+        .map(|(slot, stake)| (*slot, *stake as f64 / total_stake))
+
+
 }
 

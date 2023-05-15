@@ -14,11 +14,20 @@ pub struct StakingInfo {
     total_stake: u64,
 }
 
+impl StakingInfo {
+    pub fn get_stake(&self, vote_account: &Pubkey) -> u64 {
+        *self.stake_per_vote_account.get(vote_account).unwrap_or(&0)
+    }
+    pub fn get_total_stake(&self) -> u64 {
+        self.total_stake
+    }
+}
 
-// TODO remove
+
 pub async fn load_votestuff() -> anyhow::Result<StakingInfo> {
     // let url = "https://api.devnet.solana.com".to_string();
-    let url = "http://5.62.126.197:8899/".to_string(); // mangobox testnet
+    let url = "https://api.testnet.solana.com".to_string();
+    // let url = "http://5.62.126.197:8899/".to_string(); // mangobox testnet
     // let url = "http://147.28.169.13:8899/".to_string(); //?? small multinode machine
 
     let rpc_client = RpcClient::new_with_timeout(url.clone(), Duration::from_secs(90));

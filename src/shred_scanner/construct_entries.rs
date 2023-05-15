@@ -93,7 +93,7 @@ pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &Ato
     debug!("last = {last_index:?}");
     debug!("indizes_seen(sorted) {:?}", indizes_seen.iter().sorted().collect_vec());
     let complete = check_if_complete(&indizes_seen, collector, last_index);
-    debug!("completed status {:?}", complete);
+    // debug!("completed status {:?}", complete);
 
 
     // debug!("total data so {}", collector.len());
@@ -127,6 +127,8 @@ pub struct Vote {
     // signature of the bank's state at the last slot
     pub block_hash: Hash,
     // TODO add timestamp
+    pub root_slot: Slot,
+    pub slot: Slot,
 }
 
 fn entries_from_blockdata_votes(data: Vec<u8>) -> bincode::Result<Vec<Entry>> {
@@ -155,6 +157,8 @@ pub fn extract_votes_from_entries(entries: Vec<Entry>) -> Vec<Vote> {
                             voter: account_keys[compiled_instruction.accounts[1] as usize],
                             timestamp: vote.timestamp,
                             block_hash: vote.hash,
+                            root_slot: vote.slots[0], // TODO is that correct?
+                            slot: vote.slots[vote.slots.len() - 1]
                         }),
                         // new vote instruction - see  https://forum.solana.com/t/feature-compact-vote-state-1-14-17/174
                         VoteInstruction::CompactUpdateVoteState(vote) => Some(Vote {
@@ -162,12 +166,16 @@ pub fn extract_votes_from_entries(entries: Vec<Entry>) -> Vec<Vote> {
                             voter: account_keys[compiled_instruction.accounts[1] as usize],
                             timestamp: vote.timestamp,
                             block_hash: vote.hash,
+                            root_slot: vote.root.expect("must have root slot"), // TODO is that correct?
+                            slot: vote.last_voted_slot().expect("must have lockout")
                         }),
                         VoteInstruction::CompactUpdateVoteStateSwitch(vote, _hash) => Some(Vote {
                             //  1. `[SIGNER]` Vote authority
                             voter: account_keys[compiled_instruction.accounts[1] as usize],
                             timestamp: vote.timestamp,
                             block_hash: vote.hash,
+                            root_slot: vote.root.expect("must have root slot"), // TODO is that correct?
+                            slot: vote.last_voted_slot().expect("must have lockout")
                         }),
                         _ => None,
                     }
