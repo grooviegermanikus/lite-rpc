@@ -13,15 +13,15 @@ use etherparse::{SlicedPacket, TransportSlice};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use env_logger::Env;
 use itertools::Itertools;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use solana_entry::entry::Entry;
 use solana_ledger::shred::{Error, ReedSolomonCache, Shred, ShredData, Shredder};
-use solana_sdk::clock::Slot;
-use solana_sdk::hash::Hasher;
+use solana_sdk::clock::{Slot, UnixTimestamp};
+use solana_sdk::hash::{Hash, Hasher};
 use solana_sdk::instruction::Instruction;
 use solana_sdk::message::{SanitizedVersionedMessage, VersionedMessage};
 use solana_sdk::pubkey::Pubkey;
@@ -31,7 +31,6 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::watch::Sender;
 use tokio::task::JoinHandle;
 use tokio::time;
-use tokio::time::Interval;
 use crate::CompletionState::{Complete, DataCompleteNotYetSeen, MissingDataByIndex, MissingDataBySize};
 
 
@@ -247,8 +246,9 @@ pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>, C
 #[derive(Debug, Clone)]
 struct Vote {
     pub voter: Pubkey,
-    // TODO remove
-    pub vote_instruction_debug: VoteInstruction
+    pub timestamp: Option<UnixTimestamp>,
+    // signature of the bank's state at the last slot
+    pub hash: Hash,
 }
 
 fn entries_from_blockdata_votes(data: Vec<u8>) -> bincode::Result<Vec<Entry>> {
@@ -272,16 +272,18 @@ fn inspect_entries(entries: Vec<Entry>) -> Vec<Vote> {
                     let vote_instruction = bincode::deserialize::<VoteInstruction>(compiled_instruction.data.as_slice()).unwrap();
 
                     match vote_instruction {
-                        VoteInstruction::Vote(_) => Some(Vote {
+                        VoteInstruction::Vote(vote) => Some(Vote {
                             //  1. `[SIGNER]` Vote authority
                             voter: account_keys[compiled_instruction.accounts[1] as usize],
-                            vote_instruction_debug: vote_instruction,
+                            timestamp: vote.timestamp,
+                            hash: vote.hash,
                         }),
                         // new vote instruction - see  https://forum.solana.com/t/feature-compact-vote-state-1-14-17/174
-                        VoteInstruction::CompactUpdateVoteState(_) => Some(Vote {
+                        VoteInstruction::CompactUpdateVoteState(vote) => Some(Vote {
                             //  1. `[SIGNER]` Vote authority
                             voter: account_keys[compiled_instruction.accounts[1] as usize],
-                            vote_instruction_debug: vote_instruction,
+                            timestamp: vote.timestamp,
+                            hash: vote.hash,
                         }),
                         _ => None,
                     }
