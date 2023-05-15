@@ -3,8 +3,10 @@ use std::collections::{HashMap, HashSet};
 use pcap_parser::*;
 use pcap_parser::traits::PcapReaderIterator;
 use std::fs::File;
+use std::iter::FlatMap;
 use std::net::{SocketAddr, UdpSocket};
 use std::ops::{Deref, Range, RangeTo};
+use std::slice::Iter;
 use etherparse::IpNumber::Udp;
 use etherparse::{SlicedPacket, TransportSlice};
 
@@ -20,6 +22,11 @@ use solana_entry::entry::Entry;
 use solana_ledger::shred::{Error, ReedSolomonCache, Shred, ShredData, Shredder};
 use solana_sdk::clock::Slot;
 use solana_sdk::hash::Hasher;
+use solana_sdk::instruction::Instruction;
+use solana_sdk::message::{SanitizedVersionedMessage, VersionedMessage};
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::transaction::{SanitizedVersionedTransaction, VersionedTransaction};
+use solana_sdk::vote::instruction::VoteInstruction;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::watch::Sender;
 use tokio::task::JoinHandle;
@@ -161,6 +168,9 @@ pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>, C
         }
     };
 
+    assert!(recovered.iter().all(|shred| shred.is_data()),
+        "recovery produces only data shreds");
+
 
     let mut collector: HashMap<u32, &Shred> = HashMap::new();
     // TDOO redundant
@@ -169,6 +179,7 @@ pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>, C
 
     only_my_slot
         .iter()
+        .filter(|shred| shred.is_data())
         .chain(recovered.iter())
         .for_each(|s| {
             // let mut hasher = Hasher::default();
@@ -183,22 +194,11 @@ pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>, C
                 last_index = Some(s.index());
             }
 
-            match s {
-                Shred::ShredData(_) => {
-                    // FIXME bytes_to_store is maybe wrong
+            assert!(s.is_data());
 
-                    collector.insert(s.index(), s);
-                    indizes_seen.insert(s.index());
+            collector.insert(s.index(), s);
+            indizes_seen.insert(s.index());
 
-                    // let Shred::ShredData(daaaata) = s else { todo!(); };
-                    // println!("daaaata {:?}", daaaata);
-                }
-                Shred::ShredCode(_) => {
-                    // TODO check if we should do that?
-                    // collector.insert(s.index(), s);
-                    // indizes_seen.insert(s.index());
-                }
-            }
         });
 
     debug!("indizes_seen {:?}", indizes_seen);
@@ -215,58 +215,84 @@ pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>, C
 
         let attempt: Result<usize, Error> = Shredder::deshred(only_my_slot.as_slice()).map(|data| data.len());
         debug!("shredder recontructed size {:?}", attempt);
-        let decode_using_mystuff;
-        {
-            let mut buffer = Vec::new();
 
-            (0..=last_index).map(|i| {
-                let shred = collector.get(&i).expect(format!("no shred for index {i}").as_str());
-                *shred
-            }).map(|s| s.data().unwrap())
-                .for_each(|data| {
-                    // let shred_bufs: Vec<_> = shreds.iter().map(Shred::payload).cloned().collect();
-                    buffer.extend_from_slice(&data);
-                });
+        // sort consecutive sequence by index
+        let asdfsdfafsd = (0..=last_index).map(|i| {
+            let shred = collector.get(&i).expect(format!("no shred for index {i}").as_str());
+            shred.clone()
+        }).cloned().collect_vec();
 
-            decode_using_mystuff = entries_from_blockdata(buffer);
-            debug!("decoding_groovie ... {:?}", decode_using_mystuff);
-            if decode_using_mystuff.is_ok() {
-                info!("decodabled_groovie!");
-                CNT_DECODED.fetch_add(1, Ordering::Relaxed);
+
+        let deshredded = Shredder::deshred(asdfsdfafsd.as_slice()).expect("Must deshred");
+
+        info!("buffer size {}", deshredded.len());
+        let decode_using_shredder = entries_from_blockdata_votes(deshredded);
+        // debug!("decoding_shredder ... {:?}", decode_using_shredder);
+
+        if let Ok(entries) = decode_using_shredder {
+            info!("decodabled_shredder!");
+            CNT_DECODED.fetch_add(1, Ordering::Relaxed);
+
+            let votes = inspect_entries(entries);
+            for vote in votes {
+                println!("voted by {:?}", vote.voter)
             }
         }
-
-        let decode_using_shredder;
-        {
-            // sort consecutive sequence by index
-            let asdfsdfafsd = (0..=last_index).map(|i| {
-                let shred = collector.get(&i).expect(format!("no shred for index {i}").as_str());
-                shred.clone()
-            }).cloned().collect_vec();
-
-
-            let deshredded = Shredder::deshred(asdfsdfafsd.as_slice()).expect("Must deshred");
-
-            info!("buffer size {}", deshredded.len());
-            decode_using_shredder = entries_from_blockdata(deshredded);
-            debug!("decoding_shredder ... {:?}", decode_using_shredder);
-            if decode_using_shredder.is_ok() {
-                info!("decodabled_shredder!");
-                CNT_DECODED.fetch_add(1, Ordering::Relaxed);
-            }
-
-        }
-
-
-        assert_eq!(decode_using_shredder.is_ok(), decode_using_mystuff.is_ok());
 
     }
 
 
 }
 
-fn entries_from_blockdata(data: Vec<u8>) -> bincode::Result<Vec<Entry>> {
+#[derive(Debug, Clone)]
+struct Vote {
+    pub voter: Pubkey,
+    // TODO remove
+    pub vote_instruction_debug: VoteInstruction
+}
+
+fn entries_from_blockdata_votes(data: Vec<u8>) -> bincode::Result<Vec<Entry>> {
     bincode::deserialize::<Vec<Entry>>(&data)
+}
+
+fn inspect_entries(entries: Vec<Entry>) -> Vec<Vote> {
+
+    let mut collected_votes = Vec::new();
+
+    for entry in entries {
+        for tx in entry.transactions {
+            let transaction = SanitizedVersionedTransaction::try_from(tx).unwrap();
+            let msg = transaction.get_message();
+
+            let account_keys = msg.message.static_account_keys();
+
+            msg.message.instructions().iter()
+                .filter(|compiled_instruction| account_keys[compiled_instruction.program_id_index as usize] == solana_vote_program::id())
+                .map(|compiled_instruction| {
+                    let vote_instruction = bincode::deserialize::<VoteInstruction>(compiled_instruction.data.as_slice()).unwrap();
+
+                    match vote_instruction {
+                        VoteInstruction::Vote(_) => Some(Vote {
+                            //  1. `[SIGNER]` Vote authority
+                            voter: account_keys[compiled_instruction.accounts[1] as usize],
+                            vote_instruction_debug: vote_instruction,
+                        }),
+                        // new vote instruction - see  https://forum.solana.com/t/feature-compact-vote-state-1-14-17/174
+                        VoteInstruction::CompactUpdateVoteState(_) => Some(Vote {
+                            //  1. `[SIGNER]` Vote authority
+                            voter: account_keys[compiled_instruction.accounts[1] as usize],
+                            vote_instruction_debug: vote_instruction,
+                        }),
+                        _ => None,
+                    }
+
+                })
+                .for_each(|maybe_vote| if let Some(vote) = maybe_vote { collected_votes.push(vote) } );
+        } // -- for tx
+
+    } // -- for entries
+
+    collected_votes
 }
 
 #[derive(Debug)]
