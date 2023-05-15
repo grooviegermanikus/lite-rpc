@@ -137,10 +137,10 @@ pub fn process_all_shreds(all_shreds: Vec<Shred>) {
             for prefix_len in (1..50) {
                 let mut first_n = only_my_slot.clone();
                 first_n.truncate(prefix_len);
-                shreds_for_slot_and_fecindex(first_n, &CNT_DECODED);
+                shreds_for_slot_and_fecindex(&first_n, &CNT_DECODED);
             }
         } else {
-            shreds_for_slot_and_fecindex(only_my_slot, &CNT_DECODED);
+            shreds_for_slot_and_fecindex(&only_my_slot, &CNT_DECODED);
         }
 
 

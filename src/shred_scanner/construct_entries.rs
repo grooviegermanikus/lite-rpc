@@ -36,7 +36,7 @@ use tokio::time;
 use CompletionState::*;
 
 
-pub fn shreds_for_slot_and_fecindex(only_my_slot: Vec<Shred>, CNT_DECODED: &AtomicU64) {
+pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &AtomicU64) {
     // TODO make this more global (wee window_service - the cache is a singleton)
     let reed_solomon_cache = ReedSolomonCache::default();
 

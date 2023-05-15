@@ -4,7 +4,6 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 use pcap_parser::parse_pcap;
-use solana_ledger::shred::parse_pcap::shreds_for_slot_and_fecindex;
 use solana_ledger::shred::Shred;
 use solana_sdk::clock::Slot;
 use tokio::net::UdpSocket;
@@ -15,6 +14,7 @@ use tokio::task::JoinHandle;
 use tokio::time;
 use tokio::time::Interval;
 use crate::block_store::BlockStore;
+use crate::shred_scanner::construct_entries::shreds_for_slot_and_fecindex;
 use crate::shred_scanner::types::ErasureSetId;
 use crate::workers::tpu_utils::tpu_service::{IdentityStakes, VoteStakingInfo};
 
@@ -70,7 +70,6 @@ impl ShredCopyStreamService {
                         match Shred::new_from_serialized_shred(buf[..len].to_vec()) {
                             Ok(shred) => {
 
-                                println!("slotttt {}", shred.slot());
                                 if shred.slot() != 197191954 {
                                     continue;
                                 }
@@ -127,9 +126,11 @@ impl ShredCopyStreamService {
 
     fn process_all(mut shred_buffer_map: &HashMap<ErasureSetId, Vec<Shred>>) {
         for (esi, shreds) in shred_buffer_map {
-            shreds_for_slot_and_fecindex(shreds)
+            shreds_for_slot_and_fecindex(&shreds, &CNT_DECODED);
         }
     }
+
 }
+const CNT_DECODED: AtomicU64 = AtomicU64::new(0);
 
 
