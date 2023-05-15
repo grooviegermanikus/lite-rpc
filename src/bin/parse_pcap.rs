@@ -31,12 +31,17 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::watch::Sender;
 use tokio::task::JoinHandle;
 use tokio::time;
-use crate::CompletionState::{Complete, DataCompleteNotYetSeen, MissingDataByIndex, MissingDataBySize};
 
+use lite_rpc::shred_scanner::vote_accounts_stakes::load_votestuff;
 
-fn main() {
+use crate::CompletionState::{Complete, NumShredsYetUnknown, MissingDataByIndex, MissingDataBySize};
 
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+#[tokio::main]
+async fn main() {
+
+    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+    let staking_info = load_votestuff().await.expect("could not load stakes");
+
 
 
     let path = "/Users/stefan/mango/projects/scan-shreds/shreds-big-sunday.pcap";
@@ -99,10 +104,10 @@ fn main() {
 }
 
 
-
 fn process_all_shreds(all_shreds: Vec<Shred>) {
     println!("processing {} shreds", all_shreds.len());
 
+    // tuple (slot, fec_set_index) ErasureSetId: see shred.rs: Tuple which identifies erasure coding set that the shred belongs to
 
     let counts = all_shreds.iter().map(|s| (s.slot(), s.fec_set_index()) ).counts();
     println!("counts {:?}", counts);
@@ -110,8 +115,8 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
     let CNT_DECODED = AtomicU64::new(0);
 
     // ErasureSetId
-    for ((my_slot, fec_index),cnt) in counts.iter() {
-        // println!("slot {} {} count {} ...", my_slot, fec_index, cnt);
+    for ((my_slot, fec_index), cnt) in counts.iter() {
+        println!("slot {} fec_set_index {} count {} ...", my_slot, fec_index, cnt);
 
         let only_my_slot = all_shreds.iter()
             .map(|s| {
@@ -149,13 +154,14 @@ fn process_all_shreds(all_shreds: Vec<Shred>) {
 }
 
 pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>, CNT_DECODED: &AtomicU64) {
+    // TODO make this more global (wee window_service - the cache is a singleton)
     let reed_solomon_cache = ReedSolomonCache::default();
 
 
     // recovery looks into first shred to get the slot which then is asserted to be the same for all other shreds
     // match solana_ledger::shred::recover(vec![only_my_slot.first().unwrap().clone()], &reed_solomon_cache) {
 
-    // return `Error::TooFewShardsPresent` when there are not enough shards for reconstruction.
+    // recover is also used from blockstore.insert_shreds_handle_duplicate
     let recovered = match solana_ledger::shred::recover(only_my_slot.clone(), &reed_solomon_cache) {
         Ok(recovered_shreds) => {
             debug!("recovered {:?} shreds from {}", recovered_shreds.len(), only_my_slot.len());
@@ -174,20 +180,19 @@ pub fn shreds_for_slot_and_fecindex(_my_slot: &Slot, only_my_slot: Vec<Shred>, C
     let mut collector: HashMap<u32, &Shred> = HashMap::new();
     // TDOO redundant
     let mut indizes_seen: HashSet<u32> = HashSet::new();
-    let mut last_index = None;
+    let mut last_index: Option<u32> = None;
 
     only_my_slot
         .iter()
         .filter(|shred| shred.is_data())
         .chain(recovered.iter())
         .for_each(|s| {
-            // let mut hasher = Hasher::default();
-            // hasher.hash(&s.bytes_to_store());
-            // println!("index {} hash {} (is_data={})", s.index(), hasher.result(), s.is_data());
 
-            // println!("shred: {:?}", s);
+            if let Ok(num_data_shreds) = s.num_data_shreds() {
+                // u16 -> u32 .. should be okey, see shred_code.rs "u32::from"
+                last_index = Some(num_data_shreds as u32);
+            }
 
-            // TODO check vs s.last_in_slot()
             // see deshred for logic
             if s.data_complete() || s.last_in_slot() {
                 last_index = Some(s.index());
@@ -300,7 +305,7 @@ fn inspect_entries(entries: Vec<Entry>) -> Vec<Vote> {
 #[derive(Debug)]
 enum CompletionState {
     Complete(u32), // OK, last_index
-    DataCompleteNotYetSeen(u32),
+    NumShredsYetUnknown(u32),
     // check for size of index array failed
     MissingDataBySize(u32,u32), // (seen, last_index) - note: last_index is rangge-inclusive
     // check if all indices are there failed
@@ -310,7 +315,7 @@ enum CompletionState {
 fn check_if_complete(all_seen: &HashSet<u32>, last_index: Option<u32>) -> CompletionState {
 
     match last_index {
-        None => DataCompleteNotYetSeen(all_seen.len() as u32),
+        None => NumShredsYetUnknown(all_seen.len() as u32),
         Some(last_index) => {
 
             if all_seen.len() != 1 + last_index as usize {
