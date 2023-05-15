@@ -36,7 +36,7 @@ use tokio::time;
 use CompletionState::*;
 
 
-pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &AtomicU64) {
+pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &AtomicU64) -> CompletionState {
     // TODO make this more global (wee window_service - the cache is a singleton)
     let reed_solomon_cache = ReedSolomonCache::default();
 
@@ -60,7 +60,7 @@ pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &Ato
             "recovery produces only data shreds");
 
 
-    let mut collector: HashMap<u32, &Shred> = HashMap::new();
+    let mut collector: HashMap<u32, Shred> = HashMap::new();
     // TDOO redundant
     let mut indizes_seen: HashSet<u32> = HashSet::new();
     let mut last_index: Option<u32> = None;
@@ -83,7 +83,7 @@ pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &Ato
 
             assert!(s.is_data());
 
-            collector.insert(s.index(), s);
+            collector.insert(s.index(), s.clone());
             indizes_seen.insert(s.index());
 
         });
@@ -92,58 +92,48 @@ pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &Ato
 
     debug!("last = {last_index:?}");
     debug!("indizes_seen(sorted) {:?}", indizes_seen.iter().sorted().collect_vec());
-    let complete = check_if_complete(&indizes_seen, last_index);
+    let complete = check_if_complete(&indizes_seen, collector, last_index);
     debug!("completed status {:?}", complete);
 
 
-    debug!("total data so {}", collector.len());
+    // debug!("total data so {}", collector.len());
 
-    if let Complete(last_index) = complete {
-
-        let attempt: Result<usize, Error> = Shredder::deshred(only_my_slot.as_slice()).map(|data| data.len());
-        debug!("shredder recontructed size {:?}", attempt);
-
-        // sort consecutive sequence by index
-        let asdfsdfafsd = (0..=last_index).map(|i| {
-            let shred = collector.get(&i).expect(format!("no shred for index {i}").as_str());
-            shred.clone()
-        }).cloned().collect_vec();
-
-
-        let deshredded = Shredder::deshred(asdfsdfafsd.as_slice()).expect("Must deshred");
-
-        info!("buffer size {}", deshredded.len());
-        let decode_using_shredder = entries_from_blockdata_votes(deshredded);
-        // debug!("decoding_shredder ... {:?}", decode_using_shredder);
-
-        if let Ok(entries) = decode_using_shredder {
-            info!("decodabled_shredder!");
-            CNT_DECODED.fetch_add(1, Ordering::Relaxed);
-
-            let votes = inspect_entries(entries);
-            for vote in votes {
-                println!("block {:?} has been voted by {:?}", vote.block_hash, vote.voter)
-            }
-        }
-
-    }
-
+    complete
 
 }
 
+pub fn extract_entries_from_complete_slots(collector: HashMap<u32, Shred>, last_index: u32) -> Vec<Entry> {
+
+    // let attempt: Result<usize, Error> = Shredder::deshred(only_my_slot.as_slice()).map(|data| data.len());
+    // println!("shredder recontructed size {:?}", attempt);
+
+    // sort consecutive sequence by index
+    let sorted_shreds = (0..=last_index).map(|i| {
+        let shred = collector.get(&i).expect(format!("no shred for index {i}").as_str());
+        shred.clone()
+    }).collect_vec();
+
+    println!("sorted_shreds {:?}", sorted_shreds.len());
+    Shredder::deshred(sorted_shreds.as_slice())
+        .map(|deshredded| {
+            entries_from_blockdata_votes(deshredded).expect("must decode")
+        }).unwrap_or(vec![])
+}
+
 #[derive(Debug, Clone)]
-struct Vote {
+pub struct Vote {
     pub voter: Pubkey,
     pub timestamp: Option<UnixTimestamp>,
     // signature of the bank's state at the last slot
     pub block_hash: Hash,
+    // TODO add timestamp
 }
 
 fn entries_from_blockdata_votes(data: Vec<u8>) -> bincode::Result<Vec<Entry>> {
     bincode::deserialize::<Vec<Entry>>(&data)
 }
 
-fn inspect_entries(entries: Vec<Entry>) -> Vec<Vote> {
+pub fn extract_votes_from_entries(entries: Vec<Entry>) -> Vec<Vote> {
 
     let mut collected_votes = Vec::new();
 
@@ -173,6 +163,12 @@ fn inspect_entries(entries: Vec<Entry>) -> Vec<Vote> {
                             timestamp: vote.timestamp,
                             block_hash: vote.hash,
                         }),
+                        VoteInstruction::CompactUpdateVoteStateSwitch(vote, _hash) => Some(Vote {
+                            //  1. `[SIGNER]` Vote authority
+                            voter: account_keys[compiled_instruction.accounts[1] as usize],
+                            timestamp: vote.timestamp,
+                            block_hash: vote.hash,
+                        }),
                         _ => None,
                     }
 
@@ -182,12 +178,14 @@ fn inspect_entries(entries: Vec<Entry>) -> Vec<Vote> {
 
     } // -- for entries
 
+    println!("collected_votes {:?}", collected_votes.len());
+
     collected_votes
 }
 
 #[derive(Debug)]
 pub enum CompletionState {
-    Complete(u32), // OK, last_index
+    Complete(u32, HashMap<u32, Shred>), // OK, last_index
     NumShredsYetUnknown(u32),
     // check for size of index array failed
     MissingDataBySize(u32,u32), // (seen, last_index) - note: last_index is rangge-inclusive
@@ -195,7 +193,7 @@ pub enum CompletionState {
     MissingDataByIndex
 
 }
-fn check_if_complete(all_seen: &HashSet<u32>, last_index: Option<u32>) -> CompletionState {
+fn check_if_complete(all_seen: &HashSet<u32>, collector: HashMap<u32, Shred>, last_index: Option<u32>) -> CompletionState {
 
     match last_index {
         None => NumShredsYetUnknown(all_seen.len() as u32),
@@ -209,7 +207,7 @@ fn check_if_complete(all_seen: &HashSet<u32>, last_index: Option<u32>) -> Comple
                 return MissingDataByIndex; // TODO provide missing indices
             }
 
-            return Complete(last_index);
+            return Complete(last_index, collector);
         }
     }
 }

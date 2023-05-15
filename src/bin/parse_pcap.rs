@@ -21,6 +21,7 @@ use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use solana_entry::entry::Entry;
 use solana_ledger::shred::{Error, ReedSolomonCache, Shred, ShredData, Shredder};
+use solana_rpc_client_api::response::SlotUpdate::Completed;
 use solana_sdk::clock::{Slot, UnixTimestamp};
 use solana_sdk::hash::{Hash, Hasher};
 use solana_sdk::instruction::Instruction;
@@ -32,7 +33,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::watch::Sender;
 use tokio::task::JoinHandle;
 use tokio::time;
-use lite_rpc::shred_scanner::construct_entries::{shreds_for_slot_and_fecindex};
+use lite_rpc::shred_scanner::construct_entries::{extract_votes_from_entries, extract_entries_from_complete_slots, shreds_for_slot_and_fecindex};
+use lite_rpc::shred_scanner::construct_entries::CompletionState::Complete;
 use lite_rpc::shred_scanner::types::ErasureSetId;
 
 
@@ -97,12 +99,12 @@ async fn main() {
     }
 
 
-    process_all_shreds(all_shreds);
+    process_all_shreds(&all_shreds);
 
 
 }
 
-pub fn process_all_shreds(all_shreds: Vec<Shred>) {
+pub fn process_all_shreds(all_shreds: &Vec<Shred>) {
     println!("processing {} shreds", all_shreds.len());
 
     let counts = all_shreds.iter().map(ErasureSetId::from).counts();
@@ -115,32 +117,25 @@ pub fn process_all_shreds(all_shreds: Vec<Shred>) {
         println!("{:?} count {} ...", esi, cnt);
 
         let only_my_slot = all_shreds.iter()
-            .map(|s| {
-                // println!("slot {}", s.slot());
-                // println!("index {}", s.index());
-                s
-            })
             .filter(|s| ErasureSetId::from(*s) == *esi)
             .cloned()
             .collect_vec();
-
-
 
 
         // slot 197191944 0 count 83 ...
         // https://explorer.solana.com/block/197191944?cluster=testnet
         // successful transactions. 4547
         // process transactions: 5096
-        // if *my_slot == 197191944 && *fec_index == 0 {
         println!("selected {} shreds for {:?}", only_my_slot.len(), esi);
-        if false {
-            for prefix_len in (1..50) {
-                let mut first_n = only_my_slot.clone();
-                first_n.truncate(prefix_len);
-                shreds_for_slot_and_fecindex(&first_n, &CNT_DECODED);
+        let completed_state = shreds_for_slot_and_fecindex(&only_my_slot, &CNT_DECODED);
+        // println!("completed_state {:?}", completed_state);
+        if let Complete(last_index, collector) = completed_state {
+            let entries = extract_entries_from_complete_slots(collector, last_index);
+            println!("got {} entries", entries.len());
+            let votes = extract_votes_from_entries(entries);
+            for vote in votes {
+                println!("vote: {:?}", vote);
             }
-        } else {
-            shreds_for_slot_and_fecindex(&only_my_slot, &CNT_DECODED);
         }
 
 
