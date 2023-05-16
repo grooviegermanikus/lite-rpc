@@ -58,6 +58,11 @@ pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &Ato
         .find(|s| s.is_code())
         .map(|s| (s.num_data_shreds().expect("nds"), s.num_coding_shreds().expect("ncs")));
 
+    let count_coding = only_my_slot.iter()
+        .filter(|s| s.is_code())
+        .count();
+    // println!("count_coding from only_my_slots {:?}", count_coding);
+
     let num_from_data_flag = only_my_slot.iter()
         .chain(recovered.iter())
         .filter(|s| s.is_data())
@@ -120,9 +125,15 @@ pub fn extract_entries_from_complete_slots(collector: HashMap<u32, Shred>, last_
 
     // println!("sorted_shreds {:?}", sorted_shreds.len());
     match Shredder::deshred(sorted_shreds.as_slice()) {
-        Ok(deshredded) => entries_from_blockdata_votes(deshredded).expect("must decode"),
+        Ok(deshredded) => match entries_from_blockdata_votes(deshredded) {
+            Ok(desch) => desch,
+            Err(e) => {
+                println!("decode error on entries {:?}", e);
+                vec![]
+            }
+        },
         Err(e) => {
-            println!("deshred error {:?}", e);
+            println!("deshred error  {:?}", e);
             vec![]
         }
     }
@@ -194,7 +205,7 @@ pub fn extract_votes_from_entries(entries: Vec<Entry>) -> Vec<Vote> {
 
     } // -- for entries
 
-    println!("collected_votes {:?}", collected_votes.len());
+    // println!("collected_votes {:?}", collected_votes.len());
 
     collected_votes
 }
