@@ -33,7 +33,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::watch::Sender;
 use tokio::task::JoinHandle;
 use tokio::time;
-use lite_rpc::shred_scanner::construct_entries::{extract_votes_from_entries, extract_entries_from_complete_slots, shreds_for_slot_and_fecindex, Vote};
+use lite_rpc::shred_scanner::construct_entries::{extract_votes_from_entries, extract_entries_from_complete_slots, shreds_for_slot_and_fecindex, Vote, CompletionState};
 use lite_rpc::shred_scanner::construct_entries::CompletionState::Complete;
 use lite_rpc::shred_scanner::types::ErasureSetId;
 
@@ -108,54 +108,95 @@ async fn main() {
 pub fn process_all_shreds(all_shreds: &Vec<Shred>, staking_info: &StakingInfo, latest_vote_per_voter: &mut HashMap<Pubkey, Vote>) {
     println!("processing {} shreds", all_shreds.len());
 
-    let counts = all_shreds.iter().map(ErasureSetId::from).counts();
-    println!("counts {:?}", counts);
+    let reed_solomon_cache = ReedSolomonCache::default();
+
+    // let counts = all_shreds.iter().map(ErasureSetId::from).counts();
 
     let CNT_DECODED = AtomicU64::new(0);
 
 
     // ErasureSetId
-    for (esi, cnt) in counts.iter() {
-        println!("{:?} count {} ...", esi, cnt);
+    for current_slot in all_shreds.iter().map(|s| s.slot()).unique().sorted() {
+    // for current_slot in vec![197444561] {
 
-        let only_my_slot = all_shreds.iter()
-            .filter(|s| ErasureSetId::from(*s) == *esi)
-            .cloned()
-            .collect_vec();
+        let mut entries_per_slot = Vec::new();
 
+        let shreds_per_slot = all_shreds.iter().filter(|s| s.slot() == current_slot).count();
+        println!("selected {} shreds for slot {}", shreds_per_slot, current_slot);
 
-        // slot 197191944 0 count 83 ...
-        // https://explorer.solana.com/block/197191944?cluster=testnet
-        // successful transactions. 4547
-        // process transactions: 5096
-        println!("selected {} shreds for {:?}", only_my_slot.len(), esi);
-        let completed_state = shreds_for_slot_and_fecindex(&only_my_slot, &CNT_DECODED);
-        // println!("completed_state {:?}", completed_state);
-        if let Complete(last_index, collector) = completed_state {
-            let entries = extract_entries_from_complete_slots(collector, last_index);
-            println!("got {} entries", entries.len());
-            let votes = extract_votes_from_entries(entries);
-            for vote in &votes {
-                let last_vote = latest_vote_per_voter.get_mut(&vote.voter);
-                if let Some(last_vote) = last_vote {
-                    if last_vote.slot < vote.slot {
-                        *last_vote = vote.clone();
-                    }
-                } else {
-                    latest_vote_per_voter.insert(vote.voter, vote.clone());
+        let esi_per_slot = all_shreds.iter().filter(|s| s.slot() == current_slot).map(ErasureSetId::from).unique().collect_vec();
+        for esi in esi_per_slot {
+            let only_my_slot = all_shreds.iter()
+                // .filter(|s| ErasureSetId::from(*s).slot() == esi.slot())
+                .filter(|s| ErasureSetId::from(*s) == esi)
+                .cloned()
+                .collect_vec();
+            // println!("selected {} shreds for {:?}", only_my_slot.len(), esi);
+
+            let mut completed_state = shreds_for_slot_and_fecindex(&only_my_slot, &CNT_DECODED, &reed_solomon_cache);
+
+            match completed_state {
+                Complete(last_index, collector) => {
+                    let entries = extract_entries_from_complete_slots(collector, last_index);
+                    // println!("got {} entries", entries.len());
+                    entries_per_slot.extend(entries);
                 }
-                // println!("vote: {:?}", vote);
+                _ => {
+                    println!("completed state (error): {:?}", completed_state);
+                }
             }
-            let rooted_slot = calc_rooted_slot(&votes, latest_vote_per_voter, staking_info);
-            println!("rooted slot: {:?}", rooted_slot);
+        } // -- for all fec_sets of this slot
+
+        println!("got {} entries for slot {} (all fec indices)", entries_per_slot.len(), current_slot);
+
+        // let only_my_slot = all_shreds.iter()
+        //     .filter(|s| ErasureSetId::from(*s) == *esi)
+        //     .cloned()
+        //     .collect_vec();
 
 
+        let votes = extract_votes_from_entries(entries_per_slot);
+        for vote in &votes {
+            // println!("vote: {:?}", vote);
+            let last_vote = latest_vote_per_voter.get_mut(&vote.voter);
+            if let Some(last_vote) = last_vote {
+                if last_vote.slot < vote.slot {
+                    *last_vote = vote.clone();
+                }
+            } else {
+                latest_vote_per_voter.insert(vote.voter, vote.clone());
+            }
         }
+        let rooted_slot = calc_rooted_slot(&votes, latest_vote_per_voter, staking_info);
+        println!("rooted slot: {:?}", rooted_slot);
 
+        //
+        //
+        // let completed_state = shreds_for_slot_and_fecindex(&only_my_slot, &CNT_DECODED);
+        // // println!("completed_state {:?}", completed_state);
+        // if let Complete(last_index, collector) = completed_state {
+        //     let entries = extract_entries_from_complete_slots(collector, last_index);
+        //     println!("got {} entries", entries.len());
+        //     let votes = extract_votes_from_entries(entries);
+        //     for vote in &votes {
+        //         let last_vote = latest_vote_per_voter.get_mut(&vote.voter);
+        //         if let Some(last_vote) = last_vote {
+        //             if last_vote.slot < vote.slot {
+        //                 *last_vote = vote.clone();
+        //             }
+        //         } else {
+        //             latest_vote_per_voter.insert(vote.voter, vote.clone());
+        //         }
+        //         // println!("vote: {:?}", vote);
+        //     }
+        //     let rooted_slot = calc_rooted_slot(&votes, latest_vote_per_voter, staking_info);
+        //     println!("rooted slot: {:?}", rooted_slot);
+        // }
+        //
 
      } // -- for slots
 
-    println!("could decode {}", CNT_DECODED.load(Relaxed));
+    // println!("could decode {}", CNT_DECODED.load(Relaxed));
 }
 
 fn calc_rooted_slot(_votes: &Vec<Vote>, latest_vote_per_voter: &HashMap<Pubkey, Vote>, staking_info: &StakingInfo) -> Option<(Slot, f64)> {

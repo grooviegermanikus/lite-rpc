@@ -36,13 +36,8 @@ use tokio::time;
 use CompletionState::*;
 
 
-pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &AtomicU64) -> CompletionState {
-    // TODO make this more global (wee window_service - the cache is a singleton)
-    let reed_solomon_cache = ReedSolomonCache::default();
+pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &AtomicU64, reed_solomon_cache: &ReedSolomonCache) -> CompletionState {
 
-
-    // recovery looks into first shred to get the slot which then is asserted to be the same for all other shreds
-    // match solana_ledger::shred::recover(vec![only_my_slot.first().unwrap().clone()], &reed_solomon_cache) {
 
     // recover is also used from blockstore.insert_shreds_handle_duplicate
     let recovered = match solana_ledger::shred::recover(only_my_slot.clone(), &reed_solomon_cache) {
@@ -51,7 +46,7 @@ pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &Ato
             recovered_shreds
         }
         Err(err) => {
-            debug!("recover2 error {:?}", err);
+            info!("recovery error {:?}", err);
             vec![]
         }
     };
@@ -59,11 +54,22 @@ pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &Ato
     assert!(recovered.iter().all(|shred| shred.is_data()),
             "recovery produces only data shreds");
 
+    let num_coding_from_coding = only_my_slot.iter()
+        .find(|s| s.is_code())
+        .map(|s| (s.num_data_shreds().expect("nds"), s.num_coding_shreds().expect("ncs")));
+
+    let num_from_data_flag = only_my_slot.iter()
+        .chain(recovered.iter())
+        .filter(|s| s.is_data())
+        .find(|s| s.data_complete())
+        .map(|s| s.index() - s.fec_set_index());
+
+    let debug_code_count = only_my_slot.iter().filter(|s| s.is_code()).count();
+    // println!("debug_code_count {:?}", debug_code_count);
 
     let mut collector: HashMap<u32, Shred> = HashMap::new();
     // TDOO redundant
     let mut indizes_seen: HashSet<u32> = HashSet::new();
-    let mut last_index: Option<u32> = None;
 
     only_my_slot
         .iter()
@@ -71,27 +77,26 @@ pub fn shreds_for_slot_and_fecindex(only_my_slot: &Vec<Shred>, CNT_DECODED: &Ato
         .chain(recovered.iter())
         .for_each(|s| {
 
-            if let Ok(num_data_shreds) = s.num_data_shreds() {
-                // u16 -> u32 .. should be okey, see shred_code.rs "u32::from"
-                last_index = Some(num_data_shreds as u32);
-            }
-
-            // see deshred for logic
-            if s.data_complete() || s.last_in_slot() {
-                last_index = Some(s.index());
-            }
-
             assert!(s.is_data());
 
-            collector.insert(s.index(), s.clone());
-            indizes_seen.insert(s.index());
+            collector.insert(s.index() - s.fec_set_index() , s.clone());
+            indizes_seen.insert(s.index() - s.fec_set_index());
 
         });
 
-    debug!("indizes_seen {:?}", indizes_seen);
+    // println!("indizes_seen {:?}", indizes_seen.len());
 
-    debug!("last = {last_index:?}");
-    debug!("indizes_seen(sorted) {:?}", indizes_seen.iter().sorted().collect_vec());
+    // println!("num_from_data_flag {:?}", num_from_data_flag);
+    // println!("num_coding_from_coding {:?}", num_coding_from_coding);
+
+    // if let Some((num_data, num_coding)) = num_coding_from_coding {
+    //     assert_eq!(num_data, num_coding);
+    // }
+    let last_index = num_from_data_flag.or(num_coding_from_coding.map(|(num_data, _)| num_data as u32 - 1));
+    // println!("last_index {:?}", last_index);
+
+    // debug!("last = {last_index:?}");
+    // debug!("indizes_seen(sorted) {:?}", indizes_seen.iter().sorted().collect_vec());
     let complete = check_if_complete(&indizes_seen, collector, last_index);
     // debug!("completed status {:?}", complete);
 
@@ -113,11 +118,14 @@ pub fn extract_entries_from_complete_slots(collector: HashMap<u32, Shred>, last_
         shred.clone()
     }).collect_vec();
 
-    println!("sorted_shreds {:?}", sorted_shreds.len());
-    Shredder::deshred(sorted_shreds.as_slice())
-        .map(|deshredded| {
-            entries_from_blockdata_votes(deshredded).expect("must decode")
-        }).unwrap_or(vec![])
+    // println!("sorted_shreds {:?}", sorted_shreds.len());
+    match Shredder::deshred(sorted_shreds.as_slice()) {
+        Ok(deshredded) => entries_from_blockdata_votes(deshredded).expect("must decode"),
+        Err(e) => {
+            println!("deshred error {:?}", e);
+            vec![]
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -217,37 +225,5 @@ fn check_if_complete(all_seen: &HashSet<u32>, collector: HashMap<u32, Shred>, la
 
             return Complete(last_index, collector);
         }
-    }
-}
-
-
-fn use_packet(eth: SlicedPacket) {
-    if true {
-        return;
-    }
-
-    let reed_solomon_cache = ReedSolomonCache::default();
-
-    match Shred::new_from_serialized_shred(eth.payload.to_vec()) {
-        Ok(shred) => {
-
-            // get_shred_variant(&shred.payload).unwrap();
-            // println!("got shred {:?}", shred);
-            match solana_ledger::shred::recover(vec![], &reed_solomon_cache) {
-                Ok(recovered_shreds) => {
-                    debug!("recovered {:?} shreds", recovered_shreds);
-                }
-                Err(err) => {
-                    warn!("recover1 error {:?}", err);
-                }
-            }
-            // parse_sanitized_vote_transactio(&shred.payload);
-
-
-        }
-        Err(e) => {
-            // println!("shred error: {:?}", e); // TODO investigate
-        }
-
     }
 }

@@ -4,7 +4,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 use pcap_parser::parse_pcap;
-use solana_ledger::shred::Shred;
+use solana_ledger::shred::{ReedSolomonCache, Shred};
 use solana_sdk::clock::Slot;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -62,6 +62,8 @@ impl ShredCopyStreamService {
 
             let mut shred_buffer_map: HashMap<ErasureSetId, Vec<Shred>> = HashMap::new();
 
+            let reed_solomon_cache = ReedSolomonCache::default();
+
             loop {
                 match listen_socket.recv_from(&mut buf).await {
                     Ok((len, _peer)) => {
@@ -93,7 +95,7 @@ impl ShredCopyStreamService {
                                 debounce_log += 1;
                                 if debounce_log % 1000 == 0 {
                                     println!("shred_buffer_map len: {}", shred_buffer_map.len());
-                                    Self::process_all(&shred_buffer_map);
+                                    Self::process_all(&shred_buffer_map, &reed_solomon_cache);
                                 }
 
 
@@ -124,9 +126,9 @@ impl ShredCopyStreamService {
         join_handler
     }
 
-    fn process_all(mut shred_buffer_map: &HashMap<ErasureSetId, Vec<Shred>>) {
+    fn process_all(mut shred_buffer_map: &HashMap<ErasureSetId, Vec<Shred>>, reed_solomon_cache: &ReedSolomonCache) {
         for (esi, shreds) in shred_buffer_map {
-            shreds_for_slot_and_fecindex(&shreds, &CNT_DECODED);
+            shreds_for_slot_and_fecindex(&shreds, &CNT_DECODED, reed_solomon_cache);
         }
     }
 

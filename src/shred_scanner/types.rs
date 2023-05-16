@@ -6,6 +6,15 @@ use solana_sdk::clock::Slot;
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct ErasureSetId(Slot, /*fec_set_index:*/ u32);
 
+impl ErasureSetId {
+    pub fn slot(&self) -> Slot {
+        self.0
+    }
+    pub fn fec_set_index(&self) -> u32 {
+        self.1
+    }
+}
+
 impl From<&Shred> for ErasureSetId {
     fn from(s: &Shred) -> Self {
         ErasureSetId(s.slot(), s.fec_set_index())
