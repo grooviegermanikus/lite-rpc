@@ -40,6 +40,8 @@ use lite_rpc::shred_scanner::types::ErasureSetId;
 
 use lite_rpc::shred_scanner::vote_accounts_stakes::{load_votestuff, StakingInfo};
 
+
+// note: you need solana 1.15.2 patched by making 3 methods public (recover, num_data_shreds, num_coding_shreds)
 #[tokio::main]
 async fn main() {
 
