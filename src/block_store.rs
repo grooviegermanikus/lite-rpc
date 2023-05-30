@@ -4,6 +4,7 @@ use std::time::Duration;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use futures::io::Read;
 
 use log::info;
 use prometheus::core::GenericGauge;
@@ -24,7 +25,9 @@ lazy_static::lazy_static! {
 pub struct BlockInformation {
     pub slot: u64,
     pub block_height: u64,
+    // TODO expain
     pub instant: Instant,
+    // TODO explain
     pub processed_local_time: Option<DateTime<Utc>>,
 }
 
@@ -104,12 +107,15 @@ impl BlockStore {
             )
             .await?;
 
+        // TODO this is not necessarily the confirmed block?
         let latest_block_hash = block.blockhash;
         let block_height = block
             .block_height
             .context("Couldn't get block height of latest block for block store")?;
 
         Ok((
+            // TODO depending on requested commitment config, this might not be useful for tx submission?!
+            // e.g. if block is taken from a proccess (not yet confirmed) block it may point to a dead fork
             latest_block_hash,
             BlockInformation {
                 slot,
@@ -128,6 +134,8 @@ impl BlockStore {
         Some(info.value().to_owned())
     }
 
+    // returns an live pointer to the latest block with respective commitment config
+    // TODO nit: could be read only (see https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=74ecbb2bbf071095dc68bb9050eed05f)
     fn get_latest_block_arc(
         &self,
         commitment_config: CommitmentConfig,
@@ -137,6 +145,7 @@ impl BlockStore {
         } else if commitment_config.is_confirmed() {
             self.latest_confirmed_block.clone()
         } else {
+            // TODO warn if unsuppored config is requested
             self.latest_processed_block.clone()
         }
     }
