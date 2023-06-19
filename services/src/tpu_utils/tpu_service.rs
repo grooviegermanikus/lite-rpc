@@ -4,7 +4,8 @@ use prometheus::{core::GenericGauge, opts, register_int_gauge};
 use solana_client::nonblocking::rpc_client::RpcClient;
 
 use solana_lite_rpc_core::{
-    leader_schedule::LeaderSchedule, solana_utils::SolanaUtils,
+    // leader_schedule::LeaderSchedule,
+    solana_utils::SolanaUtils,
     structures::identity_stakes::IdentityStakes, tx_store::TxStore, AnyhowJoinHandle,
 };
 
@@ -55,9 +56,9 @@ pub struct TpuService {
     broadcast_sender: Arc<tokio::sync::broadcast::Sender<(String, Vec<u8>)>>,
     tpu_connection_manager: Arc<TpuConnectionManager>,
     identity: Arc<Keypair>,
-    identity_stakes: Arc<RwLock<IdentityStakes>>,
-    txs_sent_store: TxStore,
-    leader_schedule: Arc<LeaderSchedule>,
+    // identity_stakes: Arc<RwLock<IdentityStakes>>,
+    // txs_sent_store: TxStore,
+    // leader_schedule: Arc<LeaderSchedule>,
 }
 
 impl TpuService {
@@ -82,30 +83,16 @@ impl TpuService {
         Ok(Self {
             current_slot: Arc::new(AtomicU64::new(current_slot)),
             estimated_slot: Arc::new(AtomicU64::new(current_slot)),
-            leader_schedule: Arc::new(LeaderSchedule::new(CACHE_NEXT_SLOT_LEADERS_PUBKEY_SIZE)),
+            // leader_schedule: Arc::new(LeaderSchedule::new(CACHE_NEXT_SLOT_LEADERS_PUBKEY_SIZE)),
             fanout_slots,
             rpc_client,
             rpc_ws_address,
             broadcast_sender: Arc::new(sender),
             tpu_connection_manager: Arc::new(tpu_connection_manager),
             identity,
-            identity_stakes: Arc::new(RwLock::new(IdentityStakes::default())),
-            txs_sent_store,
+            // identity_stakes: Arc::new(RwLock::new(IdentityStakes::default())),
+            // txs_sent_store,
         })
-    }
-
-    pub async fn update_current_stakes(&self) -> anyhow::Result<()> {
-        // update stakes for identity
-        // update stakes for the identity
-        {
-            let mut lock = self.identity_stakes.write().await;
-            *lock = SolanaUtils::get_stakes_for_identity(
-                self.rpc_client.clone(),
-                self.identity.pubkey(),
-            )
-            .await?;
-        }
-        Ok(())
     }
 
     pub fn send_transaction(&self, signature: String, transaction: Vec<u8>) -> anyhow::Result<()> {
@@ -113,16 +100,16 @@ impl TpuService {
         Ok(())
     }
 
-    pub async fn update_leader_schedule(&self) -> anyhow::Result<()> {
-        let current_slot = self.current_slot.load(Ordering::Relaxed);
-        let estimated_slot = self.estimated_slot.load(Ordering::Relaxed);
-        self.leader_schedule
-            .update_leader_schedule(self.rpc_client.clone(), current_slot, estimated_slot)
-            .await?;
-        NB_OF_LEADERS_IN_SCHEDULE.set(self.leader_schedule.len().await as i64);
-        NB_CLUSTER_NODES.set(self.leader_schedule.cluster_nodes_len() as i64);
-        Ok(())
-    }
+    // pub async fn update_leader_schedule(&self) -> anyhow::Result<()> {
+    //     let current_slot = self.current_slot.load(Ordering::Relaxed);
+    //     let estimated_slot = self.estimated_slot.load(Ordering::Relaxed);
+    //     self.leader_schedule
+    //         .update_leader_schedule(self.rpc_client.clone(), current_slot, estimated_slot)
+    //         .await?;
+    //     NB_OF_LEADERS_IN_SCHEDULE.set(self.leader_schedule.len().await as i64);
+    //     NB_CLUSTER_NODES.set(self.leader_schedule.cluster_nodes_len() as i64);
+    //     Ok(())
+    // }
 
     async fn update_quic_connections(&self) {
         let estimated_slot = self.estimated_slot.load(Ordering::Relaxed);
@@ -138,28 +125,23 @@ impl TpuService {
         let fanout = self.fanout_slots;
         let last_slot = estimated_slot + fanout;
 
-        let next_leaders = self.leader_schedule.get_leaders(load_slot, last_slot).await;
-        let connections_to_keep = next_leaders
-            .iter()
-            .filter(|x| x.tpu.is_some())
-            .map(|x| {
-                let mut addr = x.tpu.unwrap();
-                // add quic port offset
-                addr.set_port(addr.port() + QUIC_PORT_OFFSET);
-                (Pubkey::from_str(x.pubkey.as_str()).unwrap(), addr)
-            })
-            .collect();
+        // let connections_to_keep = next_leaders
+        //     .iter()
+        //     .filter(|x| x.tpu.is_some())
+        //     .map(|x| {
+        //         let mut addr = x.tpu.unwrap();
+        //         // add quic port offset
+        //         addr.set_port(addr.port() + QUIC_PORT_OFFSET);
+        //         (Pubkey::from_str(x.pubkey.as_str()).unwrap(), addr)
+        //     })
+        //     .collect();
 
-        let identity_stakes = self.identity_stakes.read().await;
-
-        self.tpu_connection_manager
-            .update_connections(
-                self.broadcast_sender.clone(),
-                connections_to_keep,
-                *identity_stakes,
-                self.txs_sent_store.clone(),
-            )
-            .await;
+        // self.tpu_connection_manager
+        //     .update_connections(
+        //         self.broadcast_sender.clone(),
+        //         connections_to_keep,
+        //     )
+        //     .await;
     }
 
     fn check_exit_signal(exit_signal: &Arc<AtomicBool>) -> bool {
@@ -192,11 +174,11 @@ impl TpuService {
     }
 
     pub async fn start(&self, exit_signal: Arc<AtomicBool>) -> anyhow::Result<()> {
-        self.leader_schedule
-            .load_cluster_info(self.rpc_client.clone())
-            .await?;
-        self.update_current_stakes().await?;
-        self.update_leader_schedule().await?;
+        // self.leader_schedule
+        //     .load_cluster_info(self.rpc_client.clone())
+        //     .await?;
+        // self.update_current_stakes().await?;
+        // self.update_leader_schedule().await?;
         self.update_quic_connections().await;
 
         let this = self.clone();
@@ -215,17 +197,17 @@ impl TpuService {
                     break;
                 }
 
-                info!("update leader schedule and cluster nodes");
-                if this.update_leader_schedule().await.is_err() {
-                    error!("unable to update leader shedule");
-                }
-                if last_cluster_info_update.elapsed() > cluster_info_update_interval {
-                    if this.update_current_stakes().await.is_err() {
-                        error!("unable to update cluster infos");
-                    } else {
-                        last_cluster_info_update = Instant::now();
-                    }
-                }
+                // info!("update leader schedule and cluster nodes");
+                // if this.update_leader_schedule().await.is_err() {
+                //     error!("unable to update leader shedule");
+                // }
+                // if last_cluster_info_update.elapsed() > cluster_info_update_interval {
+                //     if this.update_current_stakes().await.is_err() {
+                //         error!("unable to update cluster infos");
+                //     } else {
+                //         last_cluster_info_update = Instant::now();
+                //     }
+                // }
             }
         });
 

@@ -63,7 +63,7 @@ impl TxSender {
         &self,
         sigs_and_slots: Vec<(String, u64)>,
         txs: Vec<WireTransaction>,
-        notifier: Option<NotificationSender>,
+        // notifier: Option<NotificationSender>,
     ) {
         assert_eq!(sigs_and_slots.len(), txs.len());
 
@@ -101,24 +101,24 @@ impl TxSender {
             };
             quic_responses.push(quic_response);
         }
-        if let Some(notifier) = &notifier {
-            let notification_msgs = sigs_and_slots
-                .iter()
-                .enumerate()
-                .map(|(index, (sig, recent_slot))| TransactionNotification {
-                    signature: sig.clone(),
-                    recent_slot: *recent_slot,
-                    forwarded_slot,
-                    forwarded_local_time,
-                    processed_slot: None,
-                    cu_consumed: None,
-                    cu_requested: None,
-                    quic_response: quic_responses[index],
-                })
-                .collect();
-            // ignore error on sent because the channel may be already closed
-            let _ = notifier.send(NotificationMsg::TxNotificationMsg(notification_msgs));
-        }
+        // if let Some(notifier) = &notifier {
+        //     let notification_msgs = sigs_and_slots
+        //         .iter()
+        //         .enumerate()
+        //         .map(|(index, (sig, recent_slot))| TransactionNotification {
+        //             signature: sig.clone(),
+        //             recent_slot: *recent_slot,
+        //             forwarded_slot,
+        //             forwarded_local_time,
+        //             processed_slot: None,
+        //             cu_consumed: None,
+        //             cu_requested: None,
+        //             quic_response: quic_responses[index],
+        //         })
+        //         .collect();
+        //     // ignore error on sent because the channel may be already closed
+        //     let _ = notifier.send(NotificationMsg::TxNotificationMsg(notification_msgs));
+        // }
         histo_timer.observe_duration();
         trace!(
             "It took {} ms to send a batch of {} transaction(s)",
@@ -131,7 +131,7 @@ impl TxSender {
     pub fn execute(
         self,
         mut recv: Receiver<(String, WireTransaction, u64)>,
-        notifier: Option<NotificationSender>,
+        // notifier: Option<NotificationSender>,
         exit_signal: Arc<AtomicBool>,
     ) -> JoinHandle<anyhow::Result<()>> {
         tokio::spawn(async move {
@@ -183,7 +183,7 @@ impl TxSender {
 
                 TX_BATCH_SIZES.set(txs.len() as i64);
                 tx_sender
-                    .forward_txs(sigs_and_slots, txs, notifier.clone())
+                    .forward_txs(sigs_and_slots, txs)
                     .await;
             }
             Ok(())

@@ -246,56 +246,56 @@ impl TpuConnectionManager {
         }
     }
 
-    pub async fn update_connections(
-        &self,
-        transaction_sender: Arc<Sender<(String, Vec<u8>)>>,
-        connections_to_keep: HashMap<Pubkey, SocketAddr>,
-        identity_stakes: IdentityStakes,
-        txs_sent_store: TxStore,
-    ) {
-        NB_CONNECTIONS_TO_KEEP.set(connections_to_keep.len() as i64);
-        for (identity, socket_addr) in &connections_to_keep {
-            if self.identity_to_active_connection.get(identity).is_none() {
-                trace!("added a connection for {}, {}", identity, socket_addr);
-                let endpoint = self.endpoints.get();
-                let active_connection = ActiveConnection::new(
-                    endpoint,
-                    *socket_addr,
-                    *identity,
-                    txs_sent_store.clone(),
-                );
-                // using mpsc as a oneshot channel/ because with one shot channel we cannot reuse the reciever
-                let (sx, rx) = tokio::sync::mpsc::channel(1);
-
-                let transaction_reciever = transaction_sender.subscribe();
-                active_connection.start_listening(transaction_reciever, rx, identity_stakes);
-                self.identity_to_active_connection.insert(
-                    *identity,
-                    Arc::new(ActiveConnectionWithExitChannel {
-                        active_connection,
-                        exit_stream: sx,
-                    }),
-                );
-            }
-        }
-
-        // remove connections which are no longer needed
-        let collect_current_active_connections = self
-            .identity_to_active_connection
-            .iter()
-            .map(|x| (*x.key(), x.value().clone()))
-            .collect::<Vec<_>>();
-        for (identity, value) in collect_current_active_connections.iter() {
-            if !connections_to_keep.contains_key(identity) {
-                trace!("removing a connection for {}", identity);
-                // ignore error for exit channel
-                value
-                    .active_connection
-                    .exit_signal
-                    .store(true, Ordering::Relaxed);
-                let _ = value.exit_stream.send(()).await;
-                self.identity_to_active_connection.remove(identity);
-            }
-        }
-    }
+    // pub async fn update_connections(
+    //     &self,
+    //     transaction_sender: Arc<Sender<(String, Vec<u8>)>>,
+    //     connections_to_keep: HashMap<Pubkey, SocketAddr>,
+    //     identity_stakes: IdentityStakes,
+    //     txs_sent_store: TxStore,
+    // ) {
+    //     NB_CONNECTIONS_TO_KEEP.set(connections_to_keep.len() as i64);
+    //     for (identity, socket_addr) in &connections_to_keep {
+    //         if self.identity_to_active_connection.get(identity).is_none() {
+    //             trace!("added a connection for {}, {}", identity, socket_addr);
+    //             let endpoint = self.endpoints.get();
+    //             let active_connection = ActiveConnection::new(
+    //                 endpoint,
+    //                 *socket_addr,
+    //                 *identity,
+    //                 txs_sent_store.clone(),
+    //             );
+    //             // using mpsc as a oneshot channel/ because with one shot channel we cannot reuse the reciever
+    //             let (sx, rx) = tokio::sync::mpsc::channel(1);
+    //
+    //             let transaction_reciever = transaction_sender.subscribe();
+    //             active_connection.start_listening(transaction_reciever, rx, identity_stakes);
+    //             self.identity_to_active_connection.insert(
+    //                 *identity,
+    //                 Arc::new(ActiveConnectionWithExitChannel {
+    //                     active_connection,
+    //                     exit_stream: sx,
+    //                 }),
+    //             );
+    //         }
+    //     }
+    //
+    //     // remove connections which are no longer needed
+    //     let collect_current_active_connections = self
+    //         .identity_to_active_connection
+    //         .iter()
+    //         .map(|x| (*x.key(), x.value().clone()))
+    //         .collect::<Vec<_>>();
+    //     for (identity, value) in collect_current_active_connections.iter() {
+    //         if !connections_to_keep.contains_key(identity) {
+    //             trace!("removing a connection for {}", identity);
+    //             // ignore error for exit channel
+    //             value
+    //                 .active_connection
+    //                 .exit_signal
+    //                 .store(true, Ordering::Relaxed);
+    //             let _ = value.exit_stream.send(()).await;
+    //             self.identity_to_active_connection.remove(identity);
+    //         }
+    //     }
+    // }
 }
