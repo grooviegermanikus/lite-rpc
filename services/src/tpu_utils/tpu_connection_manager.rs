@@ -1,5 +1,5 @@
 use dashmap::DashMap;
-use log::{error, trace};
+use log::{error, info, trace, warn};
 use prometheus::{core::GenericGauge, opts, register_int_gauge};
 use quinn::{Connection, Endpoint};
 use solana_lite_rpc_core::{
@@ -16,6 +16,8 @@ use std::{
     },
     time::Duration,
 };
+use std::net::{IpAddr, Ipv4Addr};
+use std::str::FromStr;
 use tokio::sync::{broadcast::Receiver, broadcast::Sender, RwLock};
 
 pub const QUIC_CONNECTION_TIMEOUT: Duration = Duration::from_secs(1);
@@ -241,6 +243,7 @@ impl TpuConnectionManager {
     // TODO remove fanout
     pub fn new(certificate: rustls::Certificate, key: rustls::PrivateKey, fanout: usize) -> Self {
         let number_of_clients = if fanout > 5 { fanout / 4 } else { 1 };
+        info!("Setting up pool of {} quic endpoints", number_of_clients);
         Self {
             endpoints: RotatingQueue::new(number_of_clients, || {
                 QuicConnectionUtils::create_endpoint(certificate.clone(), key.clone())
@@ -283,6 +286,22 @@ impl TpuConnectionManager {
         //         // );
         //     }
         // }
+
+        // FIXME
+        warn!("dummy connection...");
+        let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+
+        // using mpsc as a oneshot channel/ because with one shot channel we cannot reuse the reciever
+        // TODO sx not used
+        let (sx, rx) = tokio::sync::mpsc::channel(1);
+
+
+        // pubkey of tpu node
+        let tpu_node_identity = Pubkey::from_str("DiGons21LgTywWeGkXNipuNCigwJ6hszJMsJENsCw6p2").unwrap();
+        let new_active_connection = ActiveConnection::new(self.endpoints.get(), socket, tpu_node_identity);
+        let transaction_reciever = transaction_sender.subscribe();
+                new_active_connection.start_listening(transaction_reciever, rx);
+                // , identity_stakes);
 
         // // remove connections which are no longer needed
         // let collect_current_active_connections = self

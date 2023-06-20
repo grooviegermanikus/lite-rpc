@@ -213,12 +213,12 @@ impl TpuService {
         // });
 
         let this = self.clone();
-        let (slot_sender, slot_reciever) = tokio::sync::mpsc::unbounded_channel::<Slot>();
+        // let (slot_sender, slot_reciever) = tokio::sync::mpsc::unbounded_channel::<Slot>();
         let exit_signal_l = exit_signal.clone();
-        let slot_sub_task: AnyhowJoinHandle = tokio::spawn(async move {
-            this.update_current_slot(slot_sender, exit_signal_l).await;
-            Ok(())
-        });
+        // let slot_sub_task: AnyhowJoinHandle = tokio::spawn(async move {
+        //     this.update_current_slot(slot_sender, exit_signal_l).await;
+        //     Ok(())
+        // });
 
         // let estimated_slot = self.estimated_slot.clone();
         // let current_slot = self.current_slot.clone();
@@ -226,7 +226,7 @@ impl TpuService {
         let exit_signal_l = exit_signal.clone();
         // TODO rename
         let estimated_slot_calculation = tokio::spawn(async move {
-            let mut slot_update_notifier = slot_reciever;
+            // let mut slot_update_notifier = slot_reciever;
             let mut connection_update_timer = tokio::time::interval(Duration::from_millis(400));  // TODO extract
             loop {
                 if Self::check_exit_signal(&exit_signal_l) {

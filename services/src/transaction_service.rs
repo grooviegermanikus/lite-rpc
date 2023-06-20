@@ -14,6 +14,7 @@ use crate::{
     tx_sender::{TxSender, WireTransaction},
 };
 use anyhow::bail;
+use log::info;
 use solana_lite_rpc_core::{
     block_store::{BlockInformation, BlockStore},
     notifications::NotificationSender,
@@ -99,10 +100,11 @@ impl TransactionService {
         raw_tx: Vec<u8>,
         // max_retries: Option<u16>,
     ) -> anyhow::Result<String> {
+
         let tx = match bincode::deserialize::<VersionedTransaction>(&raw_tx) {
             Ok(tx) => tx,
             Err(err) => {
-                bail!(err.to_string());
+                bail!("Failed to decode transaction from raw bytes with error '{}'", err);
             }
         };
         let signature = tx.signatures[0];
@@ -122,6 +124,7 @@ impl TransactionService {
             );
         }
 
+        info!("Added transaction to sender queue.");
         Ok(signature.to_string())
     }
 
