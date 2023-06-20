@@ -45,7 +45,7 @@ const MAX_BATCH_SIZE_IN_PER_INTERVAL: usize = 2000;
 #[derive(Clone)]
 pub struct TxSender {
     /// Tx(s) forwarded to tpu
-    txs_sent_store: TxStore,
+    // txs_sent_store: TxStore,
     /// TpuClient to call the tpu port
     tpu_service: TpuService,
 }
@@ -54,7 +54,7 @@ impl TxSender {
     pub fn new(txs_sent_store: TxStore, tpu_service: TpuService) -> Self {
         Self {
             tpu_service,
-            txs_sent_store,
+            // txs_sent_store,
         }
     }
 
@@ -75,19 +75,19 @@ impl TxSender {
         let start = Instant::now();
 
         let tpu_client = self.tpu_service.clone();
-        let txs_sent = self.txs_sent_store.clone();
+        // let txs_sent = self.txs_sent_store.clone();
 
         for (sig, _) in &sigs_and_slots {
             trace!("sending transaction {}", sig);
-            txs_sent.insert(sig.to_owned(), TxProps::default());
+            // txs_sent.insert(sig.to_owned(), TxProps::default());
         }
 
-        let forwarded_slot = tpu_client.get_estimated_slot();
+        // let forwarded_slot = tpu_client.get_estimated_slot();
         let forwarded_local_time = Utc::now();
 
         let mut quic_responses = vec![];
         for (tx, (signature, _)) in txs.iter().zip(sigs_and_slots.clone()) {
-            txs_sent.insert(signature.to_owned(), TxProps::default());
+            // txs_sent.insert(signature.to_owned(), TxProps::default());
             let quic_response = match tpu_client.send_transaction(signature.clone(), tx.clone()) {
                 Ok(_) => {
                     TXS_SENT.inc_by(1);
@@ -154,10 +154,10 @@ impl TxSender {
                         Ok(value) => match value {
                             Some((sig, tx, slot)) => {
                                 TXS_IN_CHANNEL.dec();
-                                if self.txs_sent_store.contains_key(&sig) {
-                                    // duplicate transaction
-                                    continue;
-                                }
+                                // if self.txs_sent_store.contains_key(&sig) {
+                                //     // duplicate transaction
+                                //     continue;
+                                // }
                                 sigs_and_slots.push((sig, slot));
                                 txs.push(tx);
                                 // update the timeout inteval
@@ -191,17 +191,17 @@ impl TxSender {
     }
 
     pub fn cleanup(&self, ttl_duration: Duration) {
-        let length_before = self.txs_sent_store.len();
-        self.txs_sent_store.retain(|_k, v| {
-            let retain = v.sent_at.elapsed() < ttl_duration;
-            if !retain && v.status.is_none() {
-                TX_TIMED_OUT.inc();
-            }
-            retain
-        });
-        info!(
-            "Cleaned {} transactions",
-            length_before - self.txs_sent_store.len()
-        );
+        // let length_before = self.txs_sent_store.len();
+        // self.txs_sent_store.retain(|_k, v| {
+        //     let retain = v.sent_at.elapsed() < ttl_duration;
+        //     if !retain && v.status.is_none() {
+        //         TX_TIMED_OUT.inc();
+        //     }
+        //     retain
+        // });
+        // info!(
+        //     "Cleaned {} transactions",
+        //     length_before - self.txs_sent_store.len()
+        // );
     }
 }

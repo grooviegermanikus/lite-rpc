@@ -49,7 +49,7 @@ impl TransactionServiceBuilder {
     pub async fn start(
         &self,
         // notifier: Option<NotificationSender>,
-        max_retries: usize,
+        // max_retries: usize,
     ) -> (TransactionService, JoinHandle<String>) {
         let (transaction_channel, tx_recv) = mpsc::channel(self.max_nb_txs_in_queue);
 
@@ -79,7 +79,7 @@ impl TransactionServiceBuilder {
             TransactionService {
                 transaction_channel,
                 exit_signal,
-                max_retries,
+                // max_retries,
             },
             jh_services,
         )
@@ -90,14 +90,14 @@ impl TransactionServiceBuilder {
 pub struct TransactionService {
     pub transaction_channel: Sender<(String, WireTransaction, u64)>,
     pub exit_signal: Arc<AtomicBool>,
-    pub max_retries: usize,
+    // pub max_retries: usize,
 }
 
 impl TransactionService {
     pub async fn send_transaction(
         &self,
         raw_tx: Vec<u8>,
-        max_retries: Option<u16>,
+        // max_retries: Option<u16>,
     ) -> anyhow::Result<String> {
         let tx = match bincode::deserialize::<VersionedTransaction>(&raw_tx) {
             Ok(tx) => tx,
@@ -110,7 +110,7 @@ impl TransactionService {
         let slot = 9999; // FIXME
 
         let raw_tx_clone = raw_tx.clone();
-        let max_replay = max_retries.map_or(self.max_retries, |x| x as usize);
+        // let max_replay = max_retries.map_or(self.max_retries, |x| x as usize);
         if let Err(e) = self
             .transaction_channel
             .send((signature.to_string(), raw_tx, slot))

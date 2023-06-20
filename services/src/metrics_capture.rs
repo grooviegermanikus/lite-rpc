@@ -48,6 +48,17 @@ impl MetricsCapture {
     }
 
     pub fn capture(self) -> JoinHandle<anyhow::Result<()>> {
-        todo!()
+        let mut one_second = tokio::time::interval(std::time::Duration::from_secs(1));
+
+        tokio::spawn(async move {
+            info!("Capturing Metrics");
+
+            loop {
+                one_second.tick().await;
+
+                // NOOP
+
+            }
+        })
     }
 }

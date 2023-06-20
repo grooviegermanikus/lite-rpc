@@ -48,11 +48,11 @@ lazy_static::lazy_static! {
 
 #[derive(Clone)]
 pub struct TpuService {
-    current_slot: Arc<AtomicU64>,
-    estimated_slot: Arc<AtomicU64>,
-    fanout_slots: u64,
-    rpc_client: Arc<RpcClient>,
-    rpc_ws_address: String,
+    // current_slot: Arc<AtomicU64>,
+    // estimated_slot: Arc<AtomicU64>,
+    // fanout_slots: u64,
+    // rpc_client: Arc<RpcClient>,
+    // rpc_ws_address: String,
     broadcast_sender: Arc<tokio::sync::broadcast::Sender<(String, Vec<u8>)>>,
     tpu_connection_manager: Arc<TpuConnectionManager>,
     identity: Arc<Keypair>,
@@ -63,12 +63,12 @@ pub struct TpuService {
 
 impl TpuService {
     pub async fn new(
-        current_slot: Slot,
-        fanout_slots: u64,
+        // current_slot: Slot,
+        // fanout_slots: u64,
         identity: Arc<Keypair>,
-        rpc_client: Arc<RpcClient>,
-        rpc_ws_address: String,
-        txs_sent_store: TxStore,
+        // rpc_client: Arc<RpcClient>,
+        // rpc_ws_address: String,
+        // txs_sent_store: TxStore,
     ) -> anyhow::Result<Self> {
         let (sender, _) = tokio::sync::broadcast::channel(MAXIMUM_TRANSACTIONS_IN_QUEUE);
         let (certificate, key) = new_self_signed_tls_certificate(
@@ -77,16 +77,17 @@ impl TpuService {
         )
         .expect("Failed to initialize QUIC client certificates");
 
+        let _fanout_slots = 1;
         let tpu_connection_manager =
-            TpuConnectionManager::new(certificate, key, fanout_slots as usize);
+            TpuConnectionManager::new(certificate, key, _fanout_slots as usize);
 
         Ok(Self {
-            current_slot: Arc::new(AtomicU64::new(current_slot)),
-            estimated_slot: Arc::new(AtomicU64::new(current_slot)),
+            // current_slot: Arc::new(AtomicU64::new(current_slot)),
+            // estimated_slot: Arc::new(AtomicU64::new(current_slot)),
             // leader_schedule: Arc::new(LeaderSchedule::new(CACHE_NEXT_SLOT_LEADERS_PUBKEY_SIZE)),
-            fanout_slots,
-            rpc_client,
-            rpc_ws_address,
+            // fanout_slots,
+            // rpc_client,
+            // rpc_ws_address,
             broadcast_sender: Arc::new(sender),
             tpu_connection_manager: Arc::new(tpu_connection_manager),
             identity,
@@ -112,18 +113,18 @@ impl TpuService {
     // }
 
     async fn update_quic_connections(&self) {
-        let estimated_slot = self.estimated_slot.load(Ordering::Relaxed);
-        let current_slot = self.current_slot.load(Ordering::Relaxed);
-        let load_slot = if estimated_slot <= current_slot {
-            current_slot
-        } else if estimated_slot.saturating_sub(current_slot) > 8 {
-            estimated_slot - 8
-        } else {
-            current_slot
-        };
+        // let estimated_slot = self.estimated_slot.load(Ordering::Relaxed);
+        // let current_slot = self.current_slot.load(Ordering::Relaxed);
+        // let load_slot = if estimated_slot <= current_slot {
+        //     current_slot
+        // } else if estimated_slot.saturating_sub(current_slot) > 8 {
+        //     estimated_slot - 8
+        // } else {
+        //     current_slot
+        // };
 
-        let fanout = self.fanout_slots;
-        let last_slot = estimated_slot + fanout;
+        // let fanout = self.fanout_slots;
+        // let last_slot = estimated_slot + fanout;
 
         // let connections_to_keep = next_leaders
         //     .iter()
@@ -136,12 +137,12 @@ impl TpuService {
         //     })
         //     .collect();
 
-        // self.tpu_connection_manager
-        //     .update_connections(
-        //         self.broadcast_sender.clone(),
-        //         connections_to_keep,
-        //     )
-        //     .await;
+        self.tpu_connection_manager
+            .update_connections(
+                self.broadcast_sender.clone(),
+                // connections_to_keep,
+            )
+            .await;
     }
 
     fn check_exit_signal(exit_signal: &Arc<AtomicBool>) -> bool {
@@ -153,24 +154,24 @@ impl TpuService {
         update_notifier: tokio::sync::mpsc::UnboundedSender<u64>,
         exit_signal: Arc<AtomicBool>,
     ) {
-        let current_slot = self.current_slot.clone();
-        let update_slot = |slot: u64| {
-            if slot > current_slot.load(Ordering::Relaxed) {
-                current_slot.store(slot, Ordering::Relaxed);
-                CURRENT_SLOT.set(slot as i64);
-                let _ = update_notifier.send(slot);
-            }
-        };
+        // let current_slot = self.current_slot.clone();
+        // let update_slot = |slot: u64| {
+        //     if slot > current_slot.load(Ordering::Relaxed) {
+        //         current_slot.store(slot, Ordering::Relaxed);
+        //         CURRENT_SLOT.set(slot as i64);
+        //         let _ = update_notifier.send(slot);
+        //     }
+        // };
 
-        loop {
-            if Self::check_exit_signal(&exit_signal) {
-                break;
-            }
-            // always loop update the current slots as it is central to working of TPU
-            let _ =
-                SolanaUtils::poll_slots(self.rpc_client.clone(), &self.rpc_ws_address, update_slot)
-                    .await;
-        }
+        // loop {
+        //     if Self::check_exit_signal(&exit_signal) {
+        //         break;
+        //     }
+        //     // always loop update the current slots as it is central to working of TPU
+        //     let _ =
+        //         SolanaUtils::poll_slots(self.rpc_client.clone(), &self.rpc_ws_address, update_slot)
+        //             .await;
+        // }
     }
 
     pub async fn start(&self, exit_signal: Arc<AtomicBool>) -> anyhow::Result<()> {
@@ -183,33 +184,33 @@ impl TpuService {
 
         let this = self.clone();
         let exit_signal_l = exit_signal.clone();
-        let jh_update_leaders = tokio::spawn(async move {
-            let mut last_cluster_info_update = Instant::now();
-            let leader_schedule_update_interval =
-                Duration::from_secs(LEADER_SCHEDULE_UPDATE_INTERVAL);
-            let cluster_info_update_interval = Duration::from_secs(CLUSTERINFO_REFRESH_TIME);
-            loop {
-                if Self::check_exit_signal(&exit_signal_l) {
-                    break;
-                }
-                tokio::time::sleep(leader_schedule_update_interval).await;
-                if Self::check_exit_signal(&exit_signal_l) {
-                    break;
-                }
-
-                // info!("update leader schedule and cluster nodes");
-                // if this.update_leader_schedule().await.is_err() {
-                //     error!("unable to update leader shedule");
-                // }
-                // if last_cluster_info_update.elapsed() > cluster_info_update_interval {
-                //     if this.update_current_stakes().await.is_err() {
-                //         error!("unable to update cluster infos");
-                //     } else {
-                //         last_cluster_info_update = Instant::now();
-                //     }
-                // }
-            }
-        });
+        // let jh_update_leaders = tokio::spawn(async move {
+        //     let mut last_cluster_info_update = Instant::now();
+        //     let leader_schedule_update_interval =
+        //         Duration::from_secs(LEADER_SCHEDULE_UPDATE_INTERVAL);
+        //     let cluster_info_update_interval = Duration::from_secs(CLUSTERINFO_REFRESH_TIME);
+        //     loop {
+        //         if Self::check_exit_signal(&exit_signal_l) {
+        //             break;
+        //         }
+        //         tokio::time::sleep(leader_schedule_update_interval).await;
+        //         if Self::check_exit_signal(&exit_signal_l) {
+        //             break;
+        //         }
+        //
+        //         info!("update leader schedule and cluster nodes");
+        //         if this.update_leader_schedule().await.is_err() {
+        //             error!("unable to update leader shedule");
+        //         }
+        //         if last_cluster_info_update.elapsed() > cluster_info_update_interval {
+        //             if this.update_current_stakes().await.is_err() {
+        //                 error!("unable to update cluster infos");
+        //             } else {
+        //                 last_cluster_info_update = Instant::now();
+        //             }
+        //         }
+        //     }
+        // });
 
         let this = self.clone();
         let (slot_sender, slot_reciever) = tokio::sync::mpsc::unbounded_channel::<Slot>();
@@ -219,48 +220,54 @@ impl TpuService {
             Ok(())
         });
 
-        let estimated_slot = self.estimated_slot.clone();
-        let current_slot = self.current_slot.clone();
+        // let estimated_slot = self.estimated_slot.clone();
+        // let current_slot = self.current_slot.clone();
         let this = self.clone();
         let exit_signal_l = exit_signal.clone();
+        // TODO rename
         let estimated_slot_calculation = tokio::spawn(async move {
             let mut slot_update_notifier = slot_reciever;
+            let mut connection_update_timer = tokio::time::interval(Duration::from_millis(400));  // TODO extract
             loop {
                 if Self::check_exit_signal(&exit_signal_l) {
                     break;
                 }
 
-                if SolanaUtils::slot_estimator(
-                    &mut slot_update_notifier,
-                    current_slot.clone(),
-                    estimated_slot.clone(),
-                )
-                .await
-                {
-                    ESTIMATED_SLOT.set(estimated_slot.load(Ordering::Relaxed) as i64);
-                    this.update_quic_connections().await;
-                }
+                // if SolanaUtils::slot_estimator(
+                //     &mut slot_update_notifier,
+                //     current_slot.clone(),
+                //     estimated_slot.clone(),
+                // )
+                // .await
+                // {
+                //     ESTIMATED_SLOT.set(estimated_slot.load(Ordering::Relaxed) as i64);
+                //     this.update_quic_connections().await;
+                // }
+
+                this.update_quic_connections().await;
+
+                connection_update_timer.tick().await;
             }
         });
 
         tokio::select! {
-            res = jh_update_leaders => {
-                bail!("Leader update service exited unexpectedly {res:?}");
-            },
-            res = slot_sub_task => {
-                bail!("Leader update service exited unexpectedly {res:?}");
-            },
+            // res = jh_update_leaders => {
+            //     bail!("Leader update service exited unexpectedly {res:?}");
+            // },
+            // res = slot_sub_task => {
+            //     bail!("Leader update service exited unexpectedly {res:?}");
+            // },
             res = estimated_slot_calculation => {
                 bail!("Estimated slot calculation service exited unexpectedly {res:?}");
             },
         }
     }
 
-    pub fn get_estimated_slot(&self) -> u64 {
-        self.estimated_slot.load(Ordering::Relaxed)
-    }
+    // pub fn get_estimated_slot(&self) -> u64 {
+    //     self.estimated_slot.load(Ordering::Relaxed)
+    // }
 
-    pub fn get_estimated_slot_holder(&self) -> Arc<AtomicU64> {
-        self.estimated_slot.clone()
-    }
+    // pub fn get_estimated_slot_holder(&self) -> Arc<AtomicU64> {
+    //     self.estimated_slot.clone()
+    // }
 }

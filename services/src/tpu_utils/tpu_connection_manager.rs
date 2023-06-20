@@ -4,7 +4,6 @@ use prometheus::{core::GenericGauge, opts, register_int_gauge};
 use quinn::{Connection, Endpoint};
 use solana_lite_rpc_core::{
     quic_connection_utils::QuicConnectionUtils, rotating_queue::RotatingQueue,
-    structures::identity_stakes::IdentityStakes, tx_store::TxStore,
 };
 use solana_sdk::pubkey::Pubkey;
 use solana_streamer::nonblocking::quic::compute_max_allowed_uni_streams;
@@ -38,7 +37,7 @@ struct ActiveConnection {
     identity: Pubkey,
     tpu_address: SocketAddr,
     exit_signal: Arc<AtomicBool>,
-    txs_sent_store: TxStore,
+    // txs_sent_store: TxStore,
 }
 
 impl ActiveConnection {
@@ -46,14 +45,14 @@ impl ActiveConnection {
         endpoint: Endpoint,
         tpu_address: SocketAddr,
         identity: Pubkey,
-        txs_sent_store: TxStore,
+        // txs_sent_store: TxStore,
     ) -> Self {
         Self {
             endpoint,
             tpu_address,
             identity,
             exit_signal: Arc::new(AtomicBool::new(false)),
-            txs_sent_store,
+            // txs_sent_store,
         }
     }
 
@@ -61,13 +60,15 @@ impl ActiveConnection {
         NB_QUIC_CONNECTIONS.inc();
     }
 
-    fn check_for_confirmation(txs_sent_store: &TxStore, signature: String) -> bool {
-        match txs_sent_store.get(&signature) {
-            Some(props) => props.status.is_some(),
-            None => false,
-        }
-    }
+    // fn check_for_confirmation(txs_sent_store: &TxStore, signature: String) -> bool {
+    //     match txs_sent_store.get(&signature) {
+    //         Some(props) => props.status.is_some(),
+    //         None => false,
+    //     }
+    // }
 
+    // service loop, blocks until global exit signal
+    // active connection listener; 1-1 bound to transaction -receiver
     #[allow(clippy::too_many_arguments)]
     async fn listen(
         transaction_reciever: Receiver<(String, Vec<u8>)>,
@@ -76,18 +77,16 @@ impl ActiveConnection {
         addr: SocketAddr,
         exit_signal: Arc<AtomicBool>,
         identity: Pubkey,
-        identity_stakes: IdentityStakes,
-        txs_sent_store: TxStore,
     ) {
         NB_QUIC_ACTIVE_CONNECTIONS.inc();
         let mut transaction_reciever = transaction_reciever;
         let mut exit_oneshot_channel = exit_oneshot_channel;
 
-        let max_uni_stream_connections: u64 = compute_max_allowed_uni_streams(
-            identity_stakes.peer_type,
-            identity_stakes.stakes,
-            identity_stakes.total_stakes,
-        ) as u64;
+        // let max_uni_stream_connections: u64 = compute_max_allowed_uni_streams(
+        //     identity_stakes.peer_type,
+        //     identity_stakes.stakes,
+        //     identity_stakes.total_stakes,
+        // ) as u64;
         let number_of_transactions_per_unistream = 5;
 
         let task_counter: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
@@ -100,10 +99,10 @@ impl ActiveConnection {
                 break;
             }
 
-            if task_counter.load(Ordering::Relaxed) >= max_uni_stream_connections {
-                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-                continue;
-            }
+            // if task_counter.load(Ordering::Relaxed) >= max_uni_stream_connections {
+            //     tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+            //     continue;
+            // }
 
             tokio::select! {
                 tx = transaction_reciever.recv() => {
@@ -114,10 +113,10 @@ impl ActiveConnection {
 
                     let first_tx: Vec<u8> = match tx {
                         Ok((sig, tx)) => {
-                            if Self::check_for_confirmation(&txs_sent_store, sig) {
-                                // transaction is already confirmed/ no need to send
-                                continue;
-                            }
+                            // if Self::check_for_confirmation(&txs_sent_store, sig) {
+                            //     // transaction is already confirmed/ no need to send
+                            //     continue;
+                            // }
                             tx
                         },
                         Err(e) => {
@@ -129,16 +128,18 @@ impl ActiveConnection {
                         }
                     };
 
+                    // drain max of "number_of_transactions_per_unistream" to vector
                     let mut txs = vec![first_tx];
                     for _ in 1..number_of_transactions_per_unistream {
                         if let Ok((signature, tx)) = transaction_reciever.try_recv() {
-                            if Self::check_for_confirmation(&txs_sent_store, signature) {
-                                continue;
-                            }
+                            // if Self::check_for_confirmation(&txs_sent_store, signature) {
+                            //     continue;
+                            // }
                             txs.push(tx);
                         }
                     }
 
+                    // TODO what does this do?
                     if connection.is_none() {
                         // initial connection
                         let conn = QuicConnectionUtils::connect(
@@ -198,17 +199,18 @@ impl ActiveConnection {
         NB_QUIC_ACTIVE_CONNECTIONS.dec();
     }
 
+    // start service loop thread; does not block
     pub fn start_listening(
         &self,
         transaction_reciever: Receiver<(String, Vec<u8>)>,
         exit_oneshot_channel: tokio::sync::mpsc::Receiver<()>,
-        identity_stakes: IdentityStakes,
+        // identity_stakes: IdentityStakes,
     ) {
         let endpoint = self.endpoint.clone();
         let addr = self.tpu_address;
         let exit_signal = self.exit_signal.clone();
         let identity = self.identity;
-        let txs_sent_store = self.txs_sent_store.clone();
+        // let txs_sent_store = self.txs_sent_store.clone();
         tokio::spawn(async move {
             Self::listen(
                 transaction_reciever,
@@ -217,8 +219,8 @@ impl ActiveConnection {
                 addr,
                 exit_signal,
                 identity,
-                identity_stakes,
-                txs_sent_store,
+                // identity_stakes,
+                // txs_sent_store,
             )
             .await;
         });
@@ -232,70 +234,73 @@ struct ActiveConnectionWithExitChannel {
 
 pub struct TpuConnectionManager {
     endpoints: RotatingQueue<Endpoint>,
-    identity_to_active_connection: Arc<DashMap<Pubkey, Arc<ActiveConnectionWithExitChannel>>>,
+    // identity_to_active_connection: Arc<DashMap<Pubkey, Arc<ActiveConnectionWithExitChannel>>>,
 }
 
 impl TpuConnectionManager {
+    // TODO remove fanout
     pub fn new(certificate: rustls::Certificate, key: rustls::PrivateKey, fanout: usize) -> Self {
         let number_of_clients = if fanout > 5 { fanout / 4 } else { 1 };
         Self {
             endpoints: RotatingQueue::new(number_of_clients, || {
                 QuicConnectionUtils::create_endpoint(certificate.clone(), key.clone())
             }),
-            identity_to_active_connection: Arc::new(DashMap::new()),
+            // identity_to_active_connection: Arc::new(DashMap::new()),
         }
     }
 
-    // pub async fn update_connections(
-    //     &self,
-    //     transaction_sender: Arc<Sender<(String, Vec<u8>)>>,
-    //     connections_to_keep: HashMap<Pubkey, SocketAddr>,
-    //     identity_stakes: IdentityStakes,
-    //     txs_sent_store: TxStore,
-    // ) {
-    //     NB_CONNECTIONS_TO_KEEP.set(connections_to_keep.len() as i64);
-    //     for (identity, socket_addr) in &connections_to_keep {
-    //         if self.identity_to_active_connection.get(identity).is_none() {
-    //             trace!("added a connection for {}, {}", identity, socket_addr);
-    //             let endpoint = self.endpoints.get();
-    //             let active_connection = ActiveConnection::new(
-    //                 endpoint,
-    //                 *socket_addr,
-    //                 *identity,
-    //                 txs_sent_store.clone(),
-    //             );
-    //             // using mpsc as a oneshot channel/ because with one shot channel we cannot reuse the reciever
-    //             let (sx, rx) = tokio::sync::mpsc::channel(1);
-    //
-    //             let transaction_reciever = transaction_sender.subscribe();
-    //             active_connection.start_listening(transaction_reciever, rx, identity_stakes);
-    //             self.identity_to_active_connection.insert(
-    //                 *identity,
-    //                 Arc::new(ActiveConnectionWithExitChannel {
-    //                     active_connection,
-    //                     exit_stream: sx,
-    //                 }),
-    //             );
-    //         }
-    //     }
-    //
-    //     // remove connections which are no longer needed
-    //     let collect_current_active_connections = self
-    //         .identity_to_active_connection
-    //         .iter()
-    //         .map(|x| (*x.key(), x.value().clone()))
-    //         .collect::<Vec<_>>();
-    //     for (identity, value) in collect_current_active_connections.iter() {
-    //         if !connections_to_keep.contains_key(identity) {
-    //             trace!("removing a connection for {}", identity);
-    //             // ignore error for exit channel
-    //             value
-    //                 .active_connection
-    //                 .exit_signal
-    //                 .store(true, Ordering::Relaxed);
-    //             let _ = value.exit_stream.send(()).await;
-    //             self.identity_to_active_connection.remove(identity);
-    //         }
-    //     }
-    // }
+    // manages active connections; new connections might get started with a dedicated transaction receiver and connected to transaction_sender
+    pub async fn update_connections(
+        &self,
+        transaction_sender: Arc<Sender<(String, Vec<u8>)>>,
+        // connections_to_keep: HashMap<Pubkey, SocketAddr>,
+        // identity_stakes: IdentityStakes,
+        // txs_sent_store: TxStore,
+    ) {
+        // NB_CONNECTIONS_TO_KEEP.set(connections_to_keep.len() as i64);
+        // for (identity, socket_addr) in &connections_to_keep {
+        //     if self.identity_to_active_connection.get(identity).is_none() {
+        //         trace!("added a connection for {}, {}", identity, socket_addr);
+        //         let endpoint = self.endpoints.get();
+        //         let active_connection = ActiveConnection::new(
+        //             endpoint,
+        //             *socket_addr,
+        //             *identity,
+        //             // txs_sent_store.clone(),
+        //         );
+        //         // using mpsc as a oneshot channel/ because with one shot channel we cannot reuse the reciever
+        //         let (sx, rx) = tokio::sync::mpsc::channel(1);
+        //
+        //         let transaction_reciever = transaction_sender.subscribe();
+        //         active_connection.start_listening(transaction_reciever, rx);
+        //         // , identity_stakes);
+        //         // self.identity_to_active_connection.insert(
+        //         //     *identity,
+        //         //     Arc::new(ActiveConnectionWithExitChannel {
+        //         //         active_connection,
+        //         //         exit_stream: sx,
+        //         //     }),
+        //         // );
+        //     }
+        // }
+
+        // // remove connections which are no longer needed
+        // let collect_current_active_connections = self
+        //     .identity_to_active_connection
+        //     .iter()
+        //     .map(|x| (*x.key(), x.value().clone()))
+        //     .collect::<Vec<_>>();
+        // for (identity, value) in collect_current_active_connections.iter() {
+        //     if !connections_to_keep.contains_key(identity) {
+        //         trace!("removing a connection for {}", identity);
+        //         // ignore error for exit channel
+        //         value
+        //             .active_connection
+        //             .exit_signal
+        //             .store(true, Ordering::Relaxed);
+        //         let _ = value.exit_stream.send(()).await;
+        //         self.identity_to_active_connection.remove(identity);
+        //     }
+        // }
+    }
 }
