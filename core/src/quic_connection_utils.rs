@@ -121,7 +121,7 @@ impl QuicConnectionUtils {
         None
     }
 
-    pub async fn write_all(
+    async fn write_all(
         mut send_stream: SendStream,
         tx: &Vec<u8>,
         identity: Pubkey,

@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+/// takes a static list of items and return them round robin
 #[derive(Clone)]
 pub struct RotatingQueue<T> {
     deque: Arc<RwLock<VecDeque<T>>>,
