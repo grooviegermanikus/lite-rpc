@@ -37,6 +37,9 @@ use solana_sdk::{
 };
 use solana_transaction_status::TransactionStatus;
 use std::{ops::Deref, str::FromStr, sync::Arc, time::Duration};
+use serde::Serialize;
+use solana_sdk::signature::Signature;
+use solana_sdk::transaction::VersionedTransaction;
 use tokio::{
     net::ToSocketAddrs,
     sync::mpsc::{self, Sender},
@@ -136,15 +139,15 @@ impl LiteBridge {
         enable_postgres: bool,
         prometheus_addr: T,
     ) -> anyhow::Result<()> {
-        let (postgres, postgres_send) = if enable_postgres {
-            let (postgres_send, postgres_recv) = mpsc::unbounded_channel();
-            let postgres = Postgres::new().await?;
-            let postgres = postgres.start(postgres_recv);
-
-            (Some(postgres), Some(postgres_send))
-        } else {
-            (None, None)
-        };
+        // let (postgres, postgres_send) = if enable_postgres {
+        //     let (postgres_send, postgres_recv) = mpsc::unbounded_channel();
+        //     let postgres = Postgres::new().await?;
+        //     let postgres = postgres.start(postgres_recv);
+        //
+        //     (Some(postgres), Some(postgres_send))
+        // } else {
+        //     (None, None)
+        // };
 
         let metrics_capture = MetricsCapture::new().capture();
         let prometheus_sync = PrometheusSync.sync(prometheus_addr);
@@ -160,65 +163,95 @@ impl LiteBridge {
             )
             .await;
         self.transaction_service = Some(transaction_service);
-        let rpc = self.into_rpc();
 
-        let (ws_server, http_server) = {
-            let ws_server_handle = ServerBuilder::default()
-                .ws_only()
-                .build(ws_addr.clone())
-                .await?
-                .start(rpc.clone())?;
+        let transaction_service_sample = self.transaction_service.unwrap().clone();
+        let tx_sample_sender: AnyhowJoinHandle = tokio::spawn(async move {
+            info!("Sample TX Server started at {ws_addr:?}");
 
-            let http_server_handle = ServerBuilder::default()
-                .http_only()
-                .build(http_addr.clone())
-                .await?
-                .start(rpc)?;
+            let mut ticker = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                info!("Sending sample TX");
+                let tx = build_sample_tx();
 
-            let ws_server: AnyhowJoinHandle = tokio::spawn(async move {
-                info!("Websocket Server started at {ws_addr:?}");
-                ws_server_handle.stopped().await;
-                bail!("Websocket server stopped");
-            });
+                let raw_tx = bincode::serialize::<VersionedTransaction>(&tx).expect("failed to serialize tx");
 
-            let http_server: AnyhowJoinHandle = tokio::spawn(async move {
-                info!("HTTP Server started at {http_addr:?}");
-                http_server_handle.stopped().await;
-                bail!("HTTP server stopped");
-            });
 
-            (ws_server, http_server)
-        };
+                transaction_service_sample.send_transaction(raw_tx).await.expect("should be enqueued");
 
-        let postgres = tokio::spawn(async {
-            let Some(postgres) = postgres else {
-                std::future::pending::<()>().await;
-                unreachable!();
-            };
+                ticker.tick().await;
+            }
 
-            postgres.await
+            bail!("Sample TX server stopped");
         });
 
+
+        // let (ws_server, http_server) = {
+        //     let ws_server_handle = ServerBuilder::default()
+        //         .ws_only()
+        //         .build(ws_addr.clone())
+        //         .await?
+        //         .start(rpc.clone())?;
+        //
+        //     let http_server_handle = ServerBuilder::default()
+        //         .http_only()
+        //         .build(http_addr.clone())
+        //         .await?
+        //         .start(rpc)?;
+        //
+        //     let ws_server: AnyhowJoinHandle = tokio::spawn(async move {
+        //         info!("Websocket Server started at {ws_addr:?}");
+        //         ws_server_handle.stopped().await;
+        //         bail!("Websocket server stopped");
+        //     });
+        //
+        //     let http_server: AnyhowJoinHandle = tokio::spawn(async move {
+        //         info!("HTTP Server started at {http_addr:?}");
+        //         http_server_handle.stopped().await;
+        //         bail!("HTTP server stopped");
+        //     });
+        //
+        //     (ws_server, http_server)
+        // };
+
+        // let postgres = tokio::spawn(async {
+        //     let Some(postgres) = postgres else {
+        //         std::future::pending::<()>().await;
+        //         unreachable!();
+        //     };
+        //
+        //     postgres.await
+        // });
+
         tokio::select! {
-            res = ws_server => {
-                bail!("WebSocket server exited unexpectedly {res:?}");
+            res = tx_sample_sender => {
+                bail!("Sample TX server exited unexpectedly {res:?}");
             },
-            res = http_server => {
-                bail!("HTTP server exited unexpectedly {res:?}");
-            },
+            // res = ws_server => {
+            //     bail!("WebSocket server exited unexpectedly {res:?}");
+            // },
+            // res = http_server => {
+            //     bail!("HTTP server exited unexpectedly {res:?}");
+            // },
             res = metrics_capture => {
                 bail!("Metrics Capture exited unexpectedly {res:?}");
             },
             res = prometheus_sync => {
                 bail!("Prometheus Service exited unexpectedly {res:?}");
             },
-            res = postgres => {
-                bail!("Postgres service exited unexpectedly {res:?}");
-            },
+            // res = postgres => {
+            //     bail!("Postgres service exited unexpectedly {res:?}");
+            // },
             res = jh_transaction_services => {
                 bail!("Transaction service exited unexpectedly {res:?}");
             }
         }
+    }
+}
+
+fn build_sample_tx() -> VersionedTransaction {
+    VersionedTransaction {
+        message: Default::default(),
+        signatures: vec![Signature::default()],
     }
 }
 
