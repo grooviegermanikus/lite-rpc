@@ -61,12 +61,12 @@ lazy_static::lazy_static! {
 
 /// A bridge between clients and tpu
 pub struct LiteBridge {
-    pub rpc_client: Arc<RpcClient>,
+    // pub rpc_client: Arc<RpcClient>,
     // pub tx_store: TxStore,
     // None if LiteBridge is not executed
     pub tx_send_channel: Option<Sender<(String, WireTransaction, u64)>>,
     // pub block_store: BlockStore,
-    pub max_retries: usize,
+    // pub max_retries: usize,
     pub transaction_service_builder: TransactionServiceBuilder,
     pub transaction_service: Option<TransactionService>,
     // pub block_listner: BlockListener,
@@ -74,31 +74,31 @@ pub struct LiteBridge {
 
 impl LiteBridge {
     pub async fn new(
-        rpc_url: String,
-        ws_addr: String,
-        fanout_slots: u64,
+        // rpc_url: String,
+        // ws_addr: String,
+        // fanout_slots: u64,
         identity: Keypair,
-        retry_after: Duration,
-        max_retries: usize,
+        // retry_after: Duration,
+        // max_retries: usize,
     ) -> anyhow::Result<Self> {
-        let rpc_client = Arc::new(RpcClient::new(rpc_url.clone()));
-        let current_slot = rpc_client.get_slot().await?;
+        // let rpc_client = Arc::new(RpcClient::new(rpc_url.clone()));
+        // let current_slot = rpc_client.get_slot().await?;
 
         let tx_store = empty_tx_store();
 
         let tpu_service = TpuService::new(
-            current_slot,
-            fanout_slots,
+            // current_slot,
+            // fanout_slots,
             Arc::new(identity),
-            rpc_client.clone(),
-            ws_addr,
-            tx_store.clone(),
+            // rpc_client.clone(),
+            // ws_addr,
+            // tx_store.clone(),
         )
         .await?;
 
         let tx_sender = TxSender::new(tx_store.clone(), tpu_service.clone());
 
-        let block_store = BlockStore::new(&rpc_client).await?;
+        // let block_store = BlockStore::new(&rpc_client).await?;
 
         // let block_listner =
         //     BlockListener::new(rpc_client.clone(), tx_store.clone(), block_store.clone());
@@ -115,11 +115,11 @@ impl LiteBridge {
         );
 
         Ok(Self {
-            rpc_client,
+            // rpc_client,
             // tx_store,
             tx_send_channel: None,
             // block_store,
-            max_retries,
+            // max_retries,
             transaction_service_builder: transaction_manager,
             transaction_service: None,
             // block_listner,
@@ -149,13 +149,13 @@ impl LiteBridge {
         let metrics_capture = MetricsCapture::new().capture();
         let prometheus_sync = PrometheusSync.sync(prometheus_addr);
 
-        let max_retries = self.max_retries;
+        // let max_retries = self.max_retries;
         let (transaction_service, jh_transaction_services) = self
             .transaction_service_builder
             .start(
                 // postgres_send,
                 // self.block_store.clone(),
-                max_retries,
+                // max_retries,
                 // clean_interval,
             )
             .await;
@@ -249,7 +249,8 @@ impl LiteRpcServer for LiteBridge {
             .expect("Transaction Service should have been initialized");
 
         match transaction_service
-            .send_transaction(raw_tx, max_retries)
+            .send_transaction(raw_tx)
+                              // , max_retries)
             .await
         {
             Ok(sig) => {
@@ -404,10 +405,10 @@ impl LiteRpcServer for LiteBridge {
     }
 }
 
-impl Deref for LiteBridge {
-    type Target = RpcClient;
-
-    fn deref(&self) -> &Self::Target {
-        &self.rpc_client
-    }
-}
+// impl Deref for LiteBridge {
+//     type Target = RpcClient;
+//
+//     fn deref(&self) -> &Self::Target {
+//         &self.rpc_client
+//     }
+// }

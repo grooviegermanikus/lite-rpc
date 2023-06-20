@@ -65,12 +65,12 @@ pub async fn main() -> anyhow::Result<()> {
     let retry_after = Duration::from_secs(transaction_retry_after_secs);
 
     let services = LiteBridge::new(
-        rpc_addr,
-        ws_addr,
-        fanout_size,
+        // rpc_addr,
+        // ws_addr,
+        // fanout_size,
         identity,
-        retry_after,
-        maximum_retries_per_tx,
+        // retry_after,
+        // maximum_retries_per_tx,
     )
     .await?
     .start_services(
