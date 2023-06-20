@@ -89,6 +89,7 @@ impl TransactionServiceBuilder {
 
 #[derive(Clone)]
 pub struct TransactionService {
+    // signature, raw_tx, slot
     pub transaction_channel: Sender<(String, WireTransaction, u64)>,
     pub exit_signal: Arc<AtomicBool>,
     // pub max_retries: usize,

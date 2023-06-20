@@ -143,6 +143,7 @@ impl ActiveConnection {
 
                     // TODO what does this do?
                     if connection.is_none() {
+                        info!("active connection not connection, connecting");
                         // initial connection
                         let conn = QuicConnectionUtils::connect(
                             identity,

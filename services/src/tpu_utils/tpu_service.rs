@@ -53,6 +53,7 @@ pub struct TpuService {
     // fanout_slots: u64,
     // rpc_client: Arc<RpcClient>,
     // rpc_ws_address: String,
+    // will later be called transaction_sender
     broadcast_sender: Arc<tokio::sync::broadcast::Sender<(String, Vec<u8>)>>,
     tpu_connection_manager: Arc<TpuConnectionManager>,
     identity: Arc<Keypair>,
