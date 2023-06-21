@@ -15,6 +15,8 @@ solana-rpc-client = { workspace = true }
 solana-rpc-client-api = { workspace = true }
 solana-transaction-status = { workspace = true }
 solana-version = { workspace = true }
+solana-streamer = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 bincode = { workspace = true }
@@ -40,9 +42,9 @@ quinn = { workspace = true }
 solana-lite-rpc-core = { workspace = true }
 solana-lite-rpc-services = { workspace = true }
 async-trait = { workspace = true }
+chrono = { workspace = true }
 tokio = { version = "1.28.2", features = ["full", "fs"]}
 tokio-postgres = { version = "0.7.8", features = ["with-chrono-0_4"] }
-chrono = { workspace = true }
 
 [dev-dependencies]
 bench = { path = "../bench" }

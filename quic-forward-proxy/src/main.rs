@@ -1,4 +1,5 @@
 use anyhow::bail;
+use jsonrpsee::tracing::info_span;
 use log::info;
 use crate::proxy::QuicForwardProxy;
 
@@ -6,11 +7,9 @@ mod proxy;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
 pub async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
 
-
-    let services = QuicForwardProxy::new(
-    )
-        .await?
+    let services = QuicForwardProxy::new().await?
         .start_services(
         );
 
