@@ -1,5 +1,4 @@
 use anyhow::bail;
-use jsonrpsee::tracing::info_span;
 use log::info;
 use crate::proxy::QuicForwardProxy;
 

@@ -11,10 +11,6 @@ publish = false
 
 [dependencies]
 solana-sdk = { workspace = true }
-solana-rpc-client = { workspace = true }
-solana-rpc-client-api = { workspace = true }
-solana-transaction-status = { workspace = true }
-solana-version = { workspace = true }
 solana-streamer = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
@@ -23,17 +19,13 @@ bincode = { workspace = true }
 bs58 = { workspace = true }
 base64 = { workspace = true }
 thiserror = { workspace = true }
-futures = { workspace = true }
 bytes = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
 clap = { workspace = true }
 dashmap = { workspace = true }
-const_env = { workspace = true }
-jsonrpsee = { workspace = true }
 tracing-subscriber = { workspace = true }
 native-tls = { workspace = true }
-postgres-native-tls = { workspace = true }
 prometheus = { workspace = true }
 lazy_static = { workspace = true }
 dotenv = { workspace = true }
@@ -44,7 +36,4 @@ solana-lite-rpc-services = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 tokio = { version = "1.28.2", features = ["full", "fs"]}
-tokio-postgres = { version = "0.7.8", features = ["with-chrono-0_4"] }
 
-[dev-dependencies]
-bench = { path = "../bench" }
