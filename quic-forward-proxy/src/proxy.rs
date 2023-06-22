@@ -13,7 +13,7 @@ use solana_sdk::transaction::VersionedTransaction;
 use tokio::net::ToSocketAddrs;
 use solana_lite_rpc_core::AnyhowJoinHandle;
 use solana_streamer::tls_certificates::new_self_signed_tls_certificate;
-use crate::quic_util::ALPN_TPU_FORWARDPROXY_PROTOCOL_ID;
+use lite_rpc_quic_forward_proxy::quic_util::ALPN_TPU_FORWARDPROXY_PROTOCOL_ID;
 
 
 pub struct QuicForwardProxy {
@@ -151,82 +151,4 @@ async fn handle_request2(
     send.finish().await?;
 
     Ok(())
-}
-
-async fn handle_connection(conn: quinn::Connecting) -> anyhow::Result<()> {
-    let connection = conn.await?;
-    // let span = info_span!(
-    //     "connection",
-    //     remote = %connection.remote_address(),
-    //     protocol = %connection
-    //         .handshake_data()
-    //         .unwrap()
-    //         .downcast::<quinn::crypto::rustls::HandshakeData>().unwrap()
-    //         .protocol
-    //         .map_or_else(|| "<none>".into(), |x| String::from_utf8_lossy(&x).into_owned())
-    // );
-    async {
-        info!("established");
-
-        // Each stream initiated by the client constitutes a new request.
-        loop {
-            let stream = connection.accept_bi().await;
-            let stream = match stream {
-                Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
-                    info!("connection closed");
-                    return Ok(());
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-                Ok(s) => s,
-            };
-            let fut = handle_request(stream);
-            tokio::spawn(
-                async move {
-                    if let Err(e) = fut.await {
-                        error!("failed: {reason}", reason = e.to_string());
-                    }
-                }
-                    // .instrument(info_span!("request")),
-            );
-        }
-    }
-        // .instrument(span)
-        .await?;
-    Ok(())
-}
-
-async fn handle_request(
-    (mut send, mut recv): (quinn::SendStream, quinn::RecvStream),
-) -> anyhow::Result<()> {
-    let req = recv
-        .read_to_end(64 * 1024)
-        .await
-        .map_err(|e| anyhow!("failed reading request: {}", e))?;
-    let mut escaped = String::new();
-    for &x in &req[..] {
-        let part = std::ascii::escape_default(x).collect::<Vec<_>>();
-        escaped.push_str(std::str::from_utf8(&part).unwrap());
-    }
-    info!("content: {}", escaped);
-    // Execute the request
-    let resp = process_get(&req).unwrap_or_else(|e| {
-        error!("failed: {}", e);
-        format!("failed to process request: {e}\n").into_bytes()
-    });
-    // Write the response
-    send.write_all(&resp)
-        .await
-        .map_err(|e| anyhow!("failed to send response: {}", e))?;
-    // Gracefully terminate the stream
-    send.finish()
-        .await
-        .map_err(|e| anyhow!("failed to shutdown stream: {}", e))?;
-    info!("complete");
-    Ok(())
-}
-
-fn process_get(p0: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
-    Ok("HELLO".as_bytes().to_vec())
 }

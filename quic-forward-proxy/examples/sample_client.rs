@@ -1,13 +1,15 @@
+// DEPRECATED: use quic-proxy main.rs
+
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use std::time::Duration;
 use anyhow::anyhow;
 use log::info;
+use rcgen::IsCa::SelfSignedOnly;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::timeout;
-
-const ALPN_TPU_FORWARDPROXY_PROTOCOL_ID: &[u8] = b"solana-tpu-forward-proxy";
-
+use lite_rpc_quic_forward_proxy::quic_util::ALPN_TPU_FORWARDPROXY_PROTOCOL_ID;
+use solana_lite_rpc_core::quic_connection_utils::SkipServerVerification;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -24,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
     client_crypto.enable_early_data = true;
     client_crypto.alpn_protocols = vec![ALPN_TPU_FORWARDPROXY_PROTOCOL_ID.to_vec()];
 
-    let mut endpoint = quinn::Endpoint::client("127.0.0.1:0".parse().unwrap())?;
+    let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap())?;
     endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(client_crypto)));
 
     let connection_timeout = Duration::from_secs(5);
@@ -49,9 +51,11 @@ async fn main() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow!("failed to shutdown stream: {}", e))?;
     let resp = recv
-        .read_to_end(usize::max_value())
+        .read_to_end(usize::MAX)
         .await
         .map_err(|e| anyhow!("failed to read response: {}", e))?;
+
+    info!("resp: {:?}", std::str::from_utf8(&resp));
 
     connection.close(99u32.into(), b"done");
 
@@ -61,26 +65,3 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
-
-struct SkipServerVerification;
-
-impl SkipServerVerification {
-    fn new() -> Arc<Self> {
-        Arc::new(Self)
-    }
-}
-
-impl rustls::client::ServerCertVerifier for SkipServerVerification {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::ServerCertVerified::assertion())
-    }
-}
-
