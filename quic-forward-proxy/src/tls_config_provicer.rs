@@ -13,7 +13,7 @@ pub trait ProxyTlsConfigProvider {
 
 }
 
-impl ProxyTlsConfigProvider for SelfSignedTlsConfiguration {
+impl ProxyTlsConfigProvider for SelfSignedTlsConfigProvider {
     fn get_client_tls_crypto_config(&self) -> ClientConfig {
         self.client_crypto.clone()
     }
@@ -23,7 +23,7 @@ impl ProxyTlsConfigProvider for SelfSignedTlsConfiguration {
     }
 }
 
-pub struct SelfSignedTlsConfiguration {
+pub struct SelfSignedTlsConfigProvider {
     hostnames: Vec<String>,
     certificate: Certificate,
     private_key: PrivateKey,
@@ -33,7 +33,7 @@ pub struct SelfSignedTlsConfiguration {
 
 const INSTANCES: AtomicU32 = AtomicU32::new(0);
 
-impl SelfSignedTlsConfiguration {
+impl SelfSignedTlsConfigProvider {
     pub fn new_singleton_self_signed_localhost() -> Self {
         // note: this check could be relaxed when you know what you are doing!
         assert_eq!(INSTANCES.fetch_add(1, Ordering::Relaxed), 0, "should be a singleton");
