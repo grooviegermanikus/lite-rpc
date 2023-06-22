@@ -1,8 +1,8 @@
 use anyhow::bail;
 use log::info;
-use lite_rpc_quic_forward_proxy::tls_config::SelfSignedTlsConfiguration;
 use crate::proxy::QuicForwardProxy;
 use crate::test_client::quic_test_client::QuicTestClient;
+use crate::tls_config::SelfSignedTlsConfiguration;
 
 mod proxy;
 mod test_client;
@@ -14,12 +14,15 @@ mod tls_config;
 pub async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    let services = QuicForwardProxy::new().await?
+    let tls_configuration = SelfSignedTlsConfiguration::new_self_signed_localhost();
+
+    let services = QuicForwardProxy::new(&tls_configuration).await?
         .start_services(
         );
 
+
     let test_client = QuicTestClient::new_with_endpoint(
-        &SelfSignedTlsConfiguration::new_self_signed_localhost()
+        &tls_configuration
     ).await?
         .start_services(
         );

@@ -14,44 +14,38 @@ use tokio::net::ToSocketAddrs;
 use solana_lite_rpc_core::AnyhowJoinHandle;
 use solana_streamer::tls_certificates::new_self_signed_tls_certificate;
 use lite_rpc_quic_forward_proxy::quic_util::ALPN_TPU_FORWARDPROXY_PROTOCOL_ID;
+use crate::tls_config::{ProxyTlsConfigProvider, SelfSignedTlsConfiguration};
 
 
 pub struct QuicForwardProxy {
-
-
+    endpoint: Endpoint,
 }
 
 impl QuicForwardProxy {
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn new(tls_config: &SelfSignedTlsConfiguration) -> anyhow::Result<Self> {
+        let server_tls_config = tls_config.get_server_tls_crypto_config();
 
-        Ok(Self {})
+        let mut quinn_server_config = ServerConfig::with_crypto(Arc::new(server_tls_config));
+
+        let socket = SocketAddr::new(IpAddr::V4("127.0.0.1".parse().unwrap()), 8080);
+        let endpoint = Endpoint::server(quinn_server_config, socket).unwrap();
+        info!("listening on {}", endpoint.local_addr()?);
+
+
+
+        Ok(Self {endpoint})
 
     }
 
     pub async fn start_services(
         mut self,
     ) -> anyhow::Result<()> {
+        let endpoint = self.endpoint.clone();
         let tx_sample_sender: AnyhowJoinHandle = tokio::spawn(async move {
             info!("Sample TX Server start");
 
             let identity_keypair = Keypair::new(); // TODO
             // let ip_addr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
-
-
-            let (server_cert, server_key) = gen_server_cert_key();
-
-            let mut server_tls_config = rustls::ServerConfig::builder()
-                // FIXME we want client auth
-                .with_safe_defaults()
-                .with_no_client_auth()
-                .with_single_cert(vec![server_cert], server_key)?;
-            server_tls_config.alpn_protocols = vec![ALPN_TPU_FORWARDPROXY_PROTOCOL_ID.to_vec()];
-
-            let mut quinn_server_config = ServerConfig::with_crypto(Arc::new(server_tls_config));
-
-            let socket = SocketAddr::new(IpAddr::V4("127.0.0.1".parse().unwrap()), 8080);
-            let endpoint = Endpoint::server(quinn_server_config, socket).unwrap();
-            info!("listening on {}", endpoint.local_addr()?);
 
             while let Some(conn) = endpoint.accept().await {
                 info!("connection incoming");
@@ -87,12 +81,6 @@ impl QuicForwardProxy {
 
 }
 
-fn gen_server_cert_key() -> (Certificate, PrivateKey) {
-    info!("generating self-signed certificate");
-    let cert = generate_simple_self_signed(vec!["localhost".into(), "127.0.0.1".into()]).unwrap();
-    let key = cert.serialize_private_key_der();
-    (Certificate(cert.serialize_der().unwrap()), PrivateKey(key))
-}
 
 // meins
 async fn handle_connection2(connecting: Connecting) -> anyhow::Result<()> {

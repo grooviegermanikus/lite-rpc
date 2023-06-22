@@ -7,8 +7,8 @@ use quinn::{Endpoint, VarInt};
 use rustls::ClientConfig;
 use tokio::io::AsyncWriteExt;
 use solana_lite_rpc_core::AnyhowJoinHandle;
-use lite_rpc_quic_forward_proxy::quic_util::ALPN_TPU_FORWARDPROXY_PROTOCOL_ID;
-use lite_rpc_quic_forward_proxy::tls_config::ProxyTlsConfigProvider;
+use crate::quic_util::ALPN_TPU_FORWARDPROXY_PROTOCOL_ID;
+use crate::tls_config::ProxyTlsConfigProvider;
 use solana_lite_rpc_core::quic_connection_utils::SkipServerVerification;
 
 pub struct QuicTestClient {
