@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU32, Ordering};
 use rcgen::generate_simple_self_signed;
 use rustls::{Certificate, ClientConfig, PrivateKey, ServerConfig};
 use solana_lite_rpc_core::quic_connection_utils::SkipServerVerification;
@@ -30,8 +31,12 @@ pub struct SelfSignedTlsConfiguration {
     server_crypto: ServerConfig,
 }
 
+const INSTANCES: AtomicU32 = AtomicU32::new(0);
+
 impl SelfSignedTlsConfiguration {
-    pub fn new_self_signed_localhost() -> Self {
+    pub fn new_singleton_self_signed_localhost() -> Self {
+        // note: this check could be relaxed when you know what you are doing!
+        assert_eq!(INSTANCES.fetch_add(1, Ordering::Relaxed), 0, "should be a singleton");
         let hostnames = vec!["localhost".to_string()];
         let (certificate, private_key) = Self::gen_tls_certificate_and_key(hostnames.clone());
         let server_crypto = Self::build_server_crypto(certificate.clone(), private_key.clone());

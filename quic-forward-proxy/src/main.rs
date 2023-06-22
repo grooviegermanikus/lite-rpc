@@ -14,7 +14,7 @@ mod tls_config;
 pub async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    let tls_configuration = SelfSignedTlsConfiguration::new_self_signed_localhost();
+    let tls_configuration = SelfSignedTlsConfiguration::new_singleton_self_signed_localhost();
 
     let services = QuicForwardProxy::new(&tls_configuration).await?
         .start_services(
