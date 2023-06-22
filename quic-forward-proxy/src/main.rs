@@ -3,6 +3,7 @@ use log::info;
 use crate::proxy::QuicForwardProxy;
 
 mod proxy;
+mod quic_util;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
 pub async fn main() -> anyhow::Result<()> {
