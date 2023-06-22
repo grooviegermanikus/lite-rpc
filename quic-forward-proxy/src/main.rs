@@ -2,35 +2,35 @@ use anyhow::bail;
 use log::info;
 use crate::proxy::QuicForwardProxy;
 use crate::test_client::quic_test_client::QuicTestClient;
-use crate::tls_config::SelfSignedTlsConfiguration;
+use crate::tls_config_provicer::SelfSignedTlsConfigProvider;
 
 mod proxy;
 mod test_client;
 mod quic_util;
-mod tls_config;
+mod tls_config_provicer;
 
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
 pub async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    let tls_configuration = SelfSignedTlsConfiguration::new_singleton_self_signed_localhost();
+    let tls_configuration = SelfSignedTlsConfigProvider::new_singleton_self_signed_localhost();
 
-    let services = QuicForwardProxy::new(&tls_configuration).await?
-        .start_services(
-        );
+    let main_services = QuicForwardProxy::new(&tls_configuration)
+        .await?
+        .start_services();
 
 
     let test_client = QuicTestClient::new_with_endpoint(
-        &tls_configuration
-    ).await?
-        .start_services(
-        );
+        &tls_configuration)
+        .await?
+        .start_services();
+
 
     let ctrl_c_signal = tokio::signal::ctrl_c();
 
     tokio::select! {
-        res = services => {
+        res = main_services => {
             bail!("Services quit unexpectedly {res:?}");
         },
         res = test_client => {

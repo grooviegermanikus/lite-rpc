@@ -8,8 +8,9 @@ use rustls::ClientConfig;
 use tokio::io::AsyncWriteExt;
 use solana_lite_rpc_core::AnyhowJoinHandle;
 use crate::quic_util::ALPN_TPU_FORWARDPROXY_PROTOCOL_ID;
-use crate::tls_config::ProxyTlsConfigProvider;
+use crate::tls_config_provicer::ProxyTlsConfigProvider;
 use solana_lite_rpc_core::quic_connection_utils::SkipServerVerification;
+use crate::test_client::sample_data_factory::build_raw_sample_tx;
 
 pub struct QuicTestClient {
     pub endpoint: Endpoint,
@@ -45,6 +46,8 @@ impl QuicTestClient {
                 for si in 0..5 {
                     let (mut send, mut recv)  = connection.open_bi().await?;
 
+                    let raw = build_raw_sample_tx();
+                    info!("raw: {:02X?}", raw);
                     send.write_all(format!("SAMPLE DATA on stream {}", si).as_bytes()).await?;
 
                     // shutdown stream

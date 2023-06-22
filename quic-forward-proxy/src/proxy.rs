@@ -14,7 +14,7 @@ use tokio::net::ToSocketAddrs;
 use solana_lite_rpc_core::AnyhowJoinHandle;
 use solana_streamer::tls_certificates::new_self_signed_tls_certificate;
 use lite_rpc_quic_forward_proxy::quic_util::ALPN_TPU_FORWARDPROXY_PROTOCOL_ID;
-use crate::tls_config::{ProxyTlsConfigProvider, SelfSignedTlsConfiguration};
+use crate::tls_config_provicer::{ProxyTlsConfigProvider, SelfSignedTlsConfigProvider};
 
 
 pub struct QuicForwardProxy {
@@ -22,7 +22,7 @@ pub struct QuicForwardProxy {
 }
 
 impl QuicForwardProxy {
-    pub async fn new(tls_config: &SelfSignedTlsConfiguration) -> anyhow::Result<Self> {
+    pub async fn new(tls_config: &SelfSignedTlsConfigProvider) -> anyhow::Result<Self> {
         let server_tls_config = tls_config.get_server_tls_crypto_config();
 
         let mut quinn_server_config = ServerConfig::with_crypto(Arc::new(server_tls_config));
