@@ -98,7 +98,7 @@ impl AutoReconnect {
             .connect(self.target_address, "localhost")
             .expect("handshake");
 
-        connection.await.expect("connection")
+        connection.await.expect("create and open connection")
     }
 }
 

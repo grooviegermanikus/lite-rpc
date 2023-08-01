@@ -16,6 +16,8 @@ use solana_sdk::transaction::VersionedTransaction;
 use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
 use solana_streamer::tls_certificates::new_self_signed_tls_certificate;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -202,9 +204,17 @@ async fn send_tx_batch_to_tpu(auto_connection: &AutoReconnect, txs: &Vec<Version
             .iter()
             .map(|tx| {
                 let tx_raw = bincode::serialize(tx).unwrap();
+
+                let sig = tx.signatures[0];
+                info!("encoded tx {} with size {}", sig, tx_raw.len());
+                let mut tx_out = File::create(format!("tx-{}.out", sig)).unwrap();
+                tx_out.write(&tx_raw).unwrap();
+                tx_out.flush().unwrap();
+
                 tx_raw
             })
             .map(|tx_raw| {
+
                 auto_connection.send_uni(tx_raw) // ignores error
             });
 

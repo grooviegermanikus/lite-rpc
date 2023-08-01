@@ -1,6 +1,8 @@
 // This class will manage the lifecycle for a transaction
 // It will send, replay if necessary and confirm by listening to blocks
 
+use std::fs::File;
+use std::io::Write;
 use std::time::Duration;
 
 use crate::{
@@ -11,6 +13,7 @@ use crate::{
     tx_sender::{TransactionInfo, TxSender},
 };
 use anyhow::bail;
+use log::info;
 use solana_lite_rpc_core::{
     block_store::{BlockInformation, BlockStore},
     notifications::NotificationSender,
@@ -161,6 +164,12 @@ impl TransactionService {
         else {
             bail!("Blockhash not found in block store".to_string());
         };
+
+        info!("encoded tx {} with size {}", signature, raw_tx.len());
+        let mut tx_out = File::create("tx.out").unwrap();
+        tx_out.write(&raw_tx).unwrap();
+        tx_out.flush().unwrap();
+
 
         let raw_tx_clone = raw_tx.clone();
         let max_replay = max_retries.map_or(self.max_retries, |x| x as usize);

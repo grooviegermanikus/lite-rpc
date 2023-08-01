@@ -9,6 +9,8 @@ pub struct Args {
     pub identity_keypair: String,
     #[arg(short = 'l', long)]
     pub proxy_listen_addr: String,
+    #[arg(short = 'r', long)]
+    pub rpc_url: String,
 }
 
 // note this is duplicated from lite-rpc module

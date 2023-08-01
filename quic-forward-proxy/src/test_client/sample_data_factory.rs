@@ -14,16 +14,15 @@ pub fn build_raw_sample_tx() -> Vec<u8> {
     ))
     .unwrap();
 
-    let tx = build_sample_tx(&payer_keypair);
+    let tx = build_sample_tx(&payer_keypair, Hash::default());
 
     let raw_tx = bincode::serialize::<VersionedTransaction>(&tx).expect("failed to serialize tx");
 
     raw_tx
 }
 
-fn build_sample_tx(payer_keypair: &Keypair) -> VersionedTransaction {
-    let blockhash = Hash::default();
-    create_memo_tx(b"hi", payer_keypair, blockhash).into()
+pub fn build_sample_tx(payer_keypair: &Keypair, recent_blockhash: Hash) -> VersionedTransaction {
+    create_memo_tx(b"hi", payer_keypair, recent_blockhash).into()
 }
 
 // from bench helpers
