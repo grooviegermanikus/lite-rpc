@@ -19,8 +19,6 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo apt-get update -y
-          sudo apt-get upgrade -y
           sudo apt-get install libssl-dev openssl -y
 
       - name: Run THE Test
