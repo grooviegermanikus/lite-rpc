@@ -50,7 +50,7 @@ pub async fn tx_forwarder(
         agents.entry(tpu_address).or_insert_with(|| {
             let mut senders = Vec::new();
             for connection_idx in 1..PARALLEL_TPU_CONNECTION_COUNT {
-                let (sender, mut receiver) = channel::<ForwardPacket>(100_000);
+                let (sender, mut receiver) = channel::<ForwardPacket>(1000);
                 senders.push(sender);
                 let exit_signal = exit_signal.clone();
                 let endpoint_copy = endpoint.clone();
