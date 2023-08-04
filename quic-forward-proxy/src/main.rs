@@ -5,7 +5,7 @@ use crate::util::get_identity_keypair;
 use anyhow::bail;
 use clap::Parser;
 use dotenv::dotenv;
-use log::info;
+use log::{error, info};
 use std::sync::Arc;
 
 use crate::validator_identity::ValidatorIdentity;

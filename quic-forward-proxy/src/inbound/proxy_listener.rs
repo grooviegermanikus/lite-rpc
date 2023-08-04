@@ -153,6 +153,7 @@ impl ProxyListener {
                             debug!("forward channel buffered: capacity {} of {}",
                                 forwarder_channel_copy.capacity(), forwarder_channel_copy.max_capacity());
                         }
+                        let n_tx = txs.len();
                         forwarder_channel_copy
                             .send_timeout(
                                 ForwardPacket {
@@ -164,7 +165,7 @@ impl ProxyListener {
                             .await
                             .context("sending internal packet from proxy to forwarder")
                             .unwrap();
-                        count_copy.fetch_add(1, Ordering::Relaxed);
+                        count_copy.fetch_add(n_tx as i64, Ordering::Relaxed);
                     });
 
                     debug!(

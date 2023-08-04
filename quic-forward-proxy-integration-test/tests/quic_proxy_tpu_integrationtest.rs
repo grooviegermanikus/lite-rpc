@@ -1,7 +1,7 @@
 use countmap::CountMap;
 use crossbeam_channel::Sender;
 
-use log::{debug, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 
 use solana_lite_rpc_core::quic_connection_utils::QuicConnectionParameters;
 use solana_lite_rpc_core::solana_utils::SerializableTransaction;
@@ -221,26 +221,26 @@ fn wireup_and_send_txs_via_channel(test_case_params: TestCaseParams) {
         );
     });
 
-    runtime_quic_proxy.block_on(async {
-        tokio::spawn(start_quic_proxy(proxy_listen_addr));
-    });
+    runtime_quic_proxy.spawn(start_quic_proxy(proxy_listen_addr));
 
-    runtime_literpc.block_on(async {
-        if test_case_params.proxy_mode {
-            tokio::spawn(start_literpc_client_proxy_mode(
-                test_case_params,
-                listen_addr,
-                literpc_validator_identity,
-                proxy_listen_addr,
-            ));
-        } else {
-            tokio::spawn(start_literpc_client_direct_mode(
-                test_case_params,
-                listen_addr,
-                literpc_validator_identity,
-            ));
+    runtime_literpc.spawn(
+        async move {
+            if test_case_params.proxy_mode {
+                start_literpc_client_proxy_mode(
+                    test_case_params,
+                    listen_addr,
+                    literpc_validator_identity,
+                    proxy_listen_addr,
+                ).await
+            } else {
+                start_literpc_client_direct_mode(
+                    test_case_params,
+                    listen_addr,
+                    literpc_validator_identity,
+                ).await
+            }
         }
-    });
+    );
 
     let packet_consumer_jh = thread::spawn(move || {
         info!("start pulling packets...");
@@ -607,7 +607,8 @@ async fn start_quic_proxy(proxy_listen_addr: SocketAddr) -> anyhow::Result<()> {
 
     tokio::select! {
         _ = proxy_service => {
-            panic!("Proxy service stopped unexpectedly")
+            error!("Proxy service stopped unexpectedly");
+            panic!("Proxy service stopped unexpectedly");
         },
     }
 }
@@ -687,3 +688,10 @@ fn create_memo_tx(msg: &[u8], payer: &Keypair, blockhash: Hash) -> Transaction {
     let message = Message::new(&[instruction], Some(&payer.pubkey()));
     Transaction::new(&[payer], message, blockhash)
 }
+
+async fn worker_panic() -> anyhow::Result<()> {
+    println!("Hello!");
+    panic!("panic");
+}
+
+

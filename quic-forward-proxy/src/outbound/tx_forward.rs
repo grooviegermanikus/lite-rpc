@@ -16,10 +16,11 @@ use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
 use solana_streamer::tls_certificates::new_self_signed_tls_certificate;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{channel, Receiver};
+use tracing::error;
 
 const MAX_PARALLEL_STREAMS: usize = 6;
 pub const PARALLEL_TPU_CONNECTION_COUNT: usize = 4;
@@ -41,9 +42,10 @@ pub async fn tx_forwarder_count_only(
             .recv()
             .await
             .expect("channel closed unexpectedly");
-        count += 1;
+        count += forward_packet.transactions.len();
 
 
+        // must be 300000
         if count % 1000 == 0 {
             info!("received {} messages from forwarder", count);
         }
@@ -64,6 +66,8 @@ pub async fn tx_forwarder(
 
     let mut agents: HashMap<SocketAddr, FanOut<ForwardPacket>> = HashMap::new();
 
+    let count = Arc::new(AtomicI64::new(0));
+
     loop {
         if exit_signal.load(Ordering::Relaxed) {
             bail!("exit signal received");
@@ -75,6 +79,20 @@ pub async fn tx_forwarder(
             .expect("channel closed unexpectedly");
         let tpu_address = forward_packet.tpu_address;
 
+        count.fetch_add(forward_packet.transactions.len() as i64, Ordering::Relaxed);
+        let cnt = count.load(Ordering::Relaxed);
+        if cnt % 1000 == 0 {
+            info!("received {} transactions for sending to TPU", cnt);
+        }
+
+        if cnt > 3000 {
+            error!("BOOOOM");
+            bail!("BOOOOM");
+        }
+
+        // with this: received 300000 transactions for sending to TPU
+        // continue; // FIXME remove
+
         agents.entry(tpu_address).or_insert_with(|| {
             let mut senders = Vec::new();
             for connection_idx in 1..PARALLEL_TPU_CONNECTION_COUNT {
@@ -82,6 +100,7 @@ pub async fn tx_forwarder(
                 senders.push(sender);
                 let exit_signal = exit_signal.clone();
                 let endpoint_copy = endpoint.clone();
+                let count = count.clone();
                 tokio::spawn(async move {
                     debug!(
                         "Start Quic forwarder agent #{} for TPU {}",
@@ -130,7 +149,11 @@ pub async fn tx_forwarder(
                                 "Outbound connection stats: {}",
                                 &auto_connection.connection_stats().await
                             );
+                            // count.fetch_add(transactions_batch.len() as i64, Ordering::Relaxed);
                         }
+
+
+
                     } // -- while all packtes from channel
 
                     info!(

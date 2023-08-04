@@ -9,7 +9,7 @@ use crate::outbound::tx_forward::{tx_forwarder, tx_forwarder_count_only};
 use crate::tls_self_signed_pair_generator::SelfSignedTlsConfigProvider;
 use crate::util::AnyhowJoinHandle;
 use crate::validator_identity::ValidatorIdentity;
-use log::info;
+use log::{error, info};
 
 pub struct QuicForwardProxy {
     // endpoint: Endpoint,
