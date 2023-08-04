@@ -15,7 +15,7 @@ use quinn::{
 use solana_sdk::pubkey::Pubkey;
 
 use solana_sdk::transaction::VersionedTransaction;
-use tokio::sync::{broadcast::Receiver, broadcast::Sender, RwLock};
+use tokio::sync::{mpsc::Receiver, mpsc::Sender, RwLock};
 
 use solana_lite_rpc_core::proxy_request_format::TpuForwardingRequest;
 use solana_lite_rpc_core::quic_connection_utils::{
@@ -58,7 +58,7 @@ impl QuicProxyConnectionManager {
 
     pub async fn update_connection(
         &self,
-        transaction_sender: Arc<Sender<(String, Vec<u8>)>>,
+        transaction_receiver: Arc<RwLock<Receiver<(String, Vec<u8>)>>>,
         // for duration of this slot these tpu nodes will receive the transactions
         connections_to_keep: HashMap<Pubkey, SocketAddr>,
         connection_parameters: QuicConnectionParameters,
@@ -88,8 +88,6 @@ impl QuicProxyConnectionManager {
         self.simple_thread_started.store(true, Relaxed);
 
         info!("Starting very simple proxy thread");
-
-        let transaction_receiver = transaction_sender.subscribe();
 
         let exit_signal = Arc::new(AtomicBool::new(false));
 
@@ -147,7 +145,7 @@ impl QuicProxyConnectionManager {
     }
 
     async fn read_transactions_and_broadcast(
-        mut transaction_receiver: Receiver<(String, Vec<u8>)>,
+        transaction_receiver: Arc<RwLock<Receiver<(String, Vec<u8>)>>>,
         current_tpu_nodes: Arc<RwLock<Vec<TpuNode>>>,
         proxy_addr: SocketAddr,
         endpoint: Endpoint,
@@ -156,6 +154,7 @@ impl QuicProxyConnectionManager {
     ) {
         let auto_connection = AutoReconnect::new(endpoint, proxy_addr);
 
+        let mut transaction_receiver_locked = transaction_receiver.write().await;
         loop {
             // exit signal set
             if exit_signal.load(Ordering::Relaxed) {
@@ -164,22 +163,22 @@ impl QuicProxyConnectionManager {
 
             tokio::select! {
                 // TODO add timeout
-                tx = transaction_receiver.recv() => {
+                tx = transaction_receiver_locked.recv() => {
 
                     let first_tx: Vec<u8> = match tx {
-                        Ok((_sig, tx)) => {
+                        Some((_sig, tx)) => {
                             tx
                         },
-                        Err(e) => {
+                        None => {
                             error!(
-                                "Broadcast channel error on recv error {}", e);
+                                "Broadcast channel error on recv error");
                             continue;
                         }
                     };
 
                     let mut txs = vec![first_tx];
                     for _ in 1..connection_parameters.number_of_transactions_per_unistream {
-                        if let Ok((_signature, tx)) = transaction_receiver.try_recv() {
+                        if let Ok((_signature, tx)) = transaction_receiver_locked.try_recv() {
                             txs.push(tx);
                         }
                     }

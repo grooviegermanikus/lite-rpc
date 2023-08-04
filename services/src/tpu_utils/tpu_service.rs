@@ -25,10 +25,12 @@ use std::{
         Arc,
     },
 };
+use futures::SinkExt;
 use tokio::{
     sync::RwLock,
     time::{Duration, Instant},
 };
+use tokio::sync::mpsc::Receiver;
 
 lazy_static::lazy_static! {
     static ref NB_CLUSTER_NODES: GenericGauge<prometheus::core::AtomicI64> =
@@ -62,6 +64,8 @@ pub struct TpuService {
     estimated_slot: Arc<AtomicU64>,
     rpc_client: Arc<RpcClient>,
     broadcast_sender: Arc<tokio::sync::broadcast::Sender<(String, Vec<u8>)>>,
+    transaction_receiver: Arc<RwLock<tokio::sync::mpsc::Receiver<(String, Vec<u8>)>>>,
+    transaction_sender: Arc<tokio::sync::mpsc::Sender<(String, Vec<u8>)>>,
     connection_manager: ConnectionManager,
     identity_stakes: Arc<RwLock<IdentityStakes>>,
     txs_sent_store: TxStore,
@@ -89,6 +93,7 @@ impl TpuService {
         txs_sent_store: TxStore,
     ) -> anyhow::Result<Self> {
         let (sender, _) = tokio::sync::broadcast::channel(config.maximum_transaction_in_queue);
+        let (tx_sender, tx_receiver) = tokio::sync::mpsc::channel(config.maximum_transaction_in_queue);
         let (certificate, key) = new_self_signed_tls_certificate(
             identity.as_ref(),
             IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
@@ -121,6 +126,8 @@ impl TpuService {
             leader_schedule: Arc::new(LeaderSchedule::new(config.number_of_leaders_to_cache)),
             rpc_client,
             broadcast_sender: Arc::new(sender),
+            transaction_receiver: Arc::new(RwLock::new(tx_receiver)),
+            transaction_sender: Arc::new(tx_sender),
             connection_manager,
             identity_stakes: Arc::new(RwLock::new(IdentityStakes::default())),
             txs_sent_store,
@@ -140,8 +147,15 @@ impl TpuService {
         Ok(())
     }
 
-    pub fn send_transaction(&self, signature: String, transaction: Vec<u8>) -> anyhow::Result<()> {
-        self.broadcast_sender.send((signature, transaction))?;
+    pub async fn send_transaction(&self, signature: String, transaction: Vec<u8>) -> anyhow::Result<()> {
+        match self.config.tpu_connection_path {
+            TpuConnectionPath::QuicDirectPath => {
+                self.broadcast_sender.send((signature, transaction))?;
+            }
+            TpuConnectionPath::QuicForwardProxyPath { .. } => {
+                self.transaction_sender.send((signature, transaction)).await?;
+            }
+        }
         Ok(())
     }
 
@@ -204,7 +218,7 @@ impl TpuService {
             } => {
                 quic_proxy_connection_manager
                     .update_connection(
-                        self.broadcast_sender.clone(),
+                        self.transaction_receiver.clone(),
                         connections_to_keep,
                         self.config.quic_connection_params,
                     )

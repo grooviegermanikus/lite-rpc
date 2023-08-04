@@ -24,6 +24,34 @@ use tokio::sync::mpsc::{channel, Receiver};
 const MAX_PARALLEL_STREAMS: usize = 6;
 pub const PARALLEL_TPU_CONNECTION_COUNT: usize = 4;
 
+pub async fn tx_forwarder_count_only(
+    validator_identity: ValidatorIdentity,
+    mut transaction_channel: Receiver<ForwardPacket>,
+    exit_signal: Arc<AtomicBool>,
+) -> anyhow::Result<()> {
+
+    let mut count = 0;
+
+    loop {
+        if exit_signal.load(Ordering::Relaxed) {
+            bail!("exit signal received");
+        }
+
+        let forward_packet = transaction_channel
+            .recv()
+            .await
+            .expect("channel closed unexpectedly");
+        count += 1;
+
+
+        if count % 1000 == 0 {
+            info!("received {} messages from forwarder", count);
+        }
+
+    }
+
+}
+
 // takes transactions from upstream clients and forwards them to the TPU
 pub async fn tx_forwarder(
     validator_identity: ValidatorIdentity,

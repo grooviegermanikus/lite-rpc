@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use crate::inbound::proxy_listener;
-use crate::outbound::tx_forward::tx_forwarder;
+use crate::outbound::tx_forward::{tx_forwarder, tx_forwarder_count_only};
 use crate::tls_self_signed_pair_generator::SelfSignedTlsConfigProvider;
 use crate::util::AnyhowJoinHandle;
 use crate::validator_identity::ValidatorIdentity;
@@ -36,7 +36,7 @@ impl QuicForwardProxy {
     pub async fn start_services(self) -> anyhow::Result<()> {
         let exit_signal = Arc::new(AtomicBool::new(false));
 
-        let (forwarder_channel, forward_receiver) = tokio::sync::mpsc::channel(1000);
+        let (forwarder_channel, forward_receiver) = tokio::sync::mpsc::channel(100000);
 
         let proxy_listener =
             proxy_listener::ProxyListener::new(self.proxy_listener_addr, self.tls_config);

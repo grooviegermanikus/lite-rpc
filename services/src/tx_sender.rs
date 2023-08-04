@@ -103,7 +103,7 @@ impl TxSender {
             let quic_response = match tpu_client.send_transaction(
                 transaction_info.signature.clone(),
                 transaction_info.transaction.clone(),
-            ) {
+            ).await {
                 Ok(_) => {
                     TXS_SENT.inc_by(1);
                     1

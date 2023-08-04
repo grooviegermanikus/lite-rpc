@@ -25,10 +25,11 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Builder;
+use std::sync::RwLock;
 
 use tokio::task::{yield_now, JoinHandle};
 use tokio::time::sleep;
@@ -150,7 +151,6 @@ pub fn with_10000_transactions_proxy() {
     });
 }
 
-#[ignore]
 #[test]
 pub fn too_many_transactions() {
     configure_logging(false);
@@ -255,7 +255,7 @@ fn wireup_and_send_txs_via_channel(test_case_params: TestCaseParams) {
             CountMap::with_capacity(test_case_params.sample_tx_count as usize);
         let warmup_tx_count: u32 = test_case_params.sample_tx_count / 2;
         while packet_count < test_case_params.sample_tx_count {
-            if latest_tx.elapsed() > Duration::from_secs(25) {
+            if latest_tx.elapsed() > Duration::from_secs(250) {
                 warn!("abort after timeout waiting for packet from quic streamer");
                 break;
             }
@@ -479,6 +479,9 @@ async fn start_literpc_client_direct_mode(
         );
 
         broadcast_sender.send(raw_sample_tx)?;
+        if (i + 1) % 1000 == 0 {
+            yield_now().await;
+        }
     }
 
     sleep(Duration::from_secs(30)).await;
@@ -498,8 +501,7 @@ async fn start_literpc_client_proxy_mode(
     );
 
     // (String, Vec<u8>) (signature, transaction)
-    let (sender, _) = tokio::sync::broadcast::channel(MAXIMUM_TRANSACTIONS_IN_QUEUE);
-    let broadcast_sender = Arc::new(sender);
+    let (tx_sender, tx_receiver) = tokio::sync::mpsc::channel(MAXIMUM_TRANSACTIONS_IN_QUEUE);
     let (certificate, key) = new_self_signed_tls_certificate(
         validator_identity.as_ref(),
         IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
@@ -561,7 +563,7 @@ async fn start_literpc_client_proxy_mode(
 
     quic_proxy_connection_manager
         .update_connection(
-            broadcast_sender.clone(),
+            Arc::new(tokio::sync::RwLock::new(tx_receiver)),
             connections_to_keep,
             QUIC_CONNECTION_PARAMS,
         )
@@ -573,15 +575,15 @@ async fn start_literpc_client_proxy_mode(
     for i in 0..test_case_params.sample_tx_count {
         let raw_sample_tx = build_raw_sample_tx(i);
         trace!(
-            "broadcast transaction {} to {} receivers: {}",
+            "broadcast transaction {}: {}",
             raw_sample_tx.0,
-            broadcast_sender.receiver_count(),
             format!("hi {}", i)
         );
 
-        broadcast_sender.send(raw_sample_tx)?;
+        tx_sender.send(raw_sample_tx).await?;
         if (i + 1) % 1000 == 0 {
             yield_now().await;
+            info!("broadcasted {} transactions", i);
         }
     }
 

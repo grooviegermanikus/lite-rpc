@@ -9,9 +9,10 @@ use log::{debug, error, info, trace};
 use quinn::{Connection, Endpoint, ServerConfig, VarInt};
 use solana_sdk::packet::PACKET_DATA_SIZE;
 use std::net::SocketAddr;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use prometheus::core::AtomicU64;
 use tokio::sync::mpsc::Sender;
 
 // note: setting this to "1" did not make a difference!
@@ -109,6 +110,8 @@ impl ProxyListener {
             client_connection.remote_address()
         );
 
+        let count = Arc::new(AtomicI64::new(0));
+
         loop {
             let maybe_stream = client_connection.accept_uni().await;
             match maybe_stream {
@@ -129,6 +132,7 @@ impl ProxyListener {
                 }
                 Ok(recv_stream) => {
                     let forwarder_channel_copy = forwarder_channel.clone();
+                    let count_copy = count.clone();
                     tokio::spawn(async move {
                         let raw_request = recv_stream.read_to_end(10_000_000).await.unwrap();
 
@@ -160,14 +164,22 @@ impl ProxyListener {
                             .await
                             .context("sending internal packet from proxy to forwarder")
                             .unwrap();
+                        count_copy.fetch_add(1, Ordering::Relaxed);
                     });
 
                     debug!(
                         "Inbound connection stats: {}",
                         connection_stats(&client_connection)
                     );
+
+                    let count = count.load(Ordering::Relaxed);
+                    if count % 1000 == 0 {
+                        info!("counter (send side): {}", count);
+                    }
                 }
             }; // -- result
         } // -- loop
+
+        // never reached
     }
 }
