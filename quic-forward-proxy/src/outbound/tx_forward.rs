@@ -85,10 +85,10 @@ pub async fn tx_forwarder(
             info!("received {} transactions for sending to TPU", cnt);
         }
 
-        if cnt > 3000 {
-            error!("BOOOOM");
-            bail!("BOOOOM");
-        }
+        // if cnt > 3000 {
+        //     error!("BOOOOM");
+        //     bail!("BOOOOM");
+        // }
 
         // with this: received 300000 transactions for sending to TPU
         // continue; // FIXME remove
@@ -170,7 +170,9 @@ pub async fn tx_forwarder(
 
         timeout_fallback(agent_channel.send(forward_packet))
             .await
-            .context("send to agent channel")??;
+            .context("send to agent channel")
+            .expect("must not time out")
+            .expect("must receive");
     } // -- loop over transactions from upstream channels
 
     // not reachable

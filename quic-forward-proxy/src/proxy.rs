@@ -51,11 +51,15 @@ impl QuicForwardProxy {
 
         let validator_identity = self.validator_identity.clone();
         let exit_signal_clone = exit_signal.clone();
-        let forwarder: AnyhowJoinHandle = tokio::spawn(tx_forwarder(
-            validator_identity,
-            forward_receiver,
-            exit_signal_clone,
-        ));
+        let forwarder: AnyhowJoinHandle = tokio::spawn(async {
+            let result = tx_forwarder(
+                validator_identity,
+                forward_receiver,
+                exit_signal_clone,
+            ).await;
+            info!("ty_forwarder result: {:?}", result);
+            result
+        });
 
         tokio::select! {
             res = quic_proxy => {

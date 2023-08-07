@@ -54,6 +54,7 @@ impl ProxyListener {
             let forwarder_channel_copy = forwarder_channel.clone();
             tokio::spawn(async move {
                 let connection = connecting.await.context("handshake").unwrap();
+                info!("Accepting connection from client {}", connection.remote_address());
                 match Self::accept_client_connection(
                     connection,
                     forwarder_channel_copy,

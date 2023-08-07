@@ -583,7 +583,7 @@ async fn start_literpc_client_proxy_mode(
         tx_sender.send(raw_sample_tx).await?;
         if (i + 1) % 1000 == 0 {
             yield_now().await;
-            info!("broadcasted {} transactions", i);
+            info!("broadcasted {} transactions, queue queued {} of {}", i, tx_sender.max_capacity() - tx_sender.capacity(), tx_sender.max_capacity());
         }
     }
 
@@ -606,9 +606,9 @@ async fn start_quic_proxy(proxy_listen_addr: SocketAddr) -> anyhow::Result<()> {
     .start_services();
 
     tokio::select! {
-        _ = proxy_service => {
-            error!("Proxy service stopped unexpectedly");
-            panic!("Proxy service stopped unexpectedly");
+        res = proxy_service => {
+            error!("Proxy service stopped unexpectedly: {res:?}");
+            panic!("Proxy service stopped unexpectedly: {res:?}");
         },
     }
 }

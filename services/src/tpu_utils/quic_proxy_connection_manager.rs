@@ -171,8 +171,8 @@ impl QuicProxyConnectionManager {
                         },
                         None => {
                             error!(
-                                "Broadcast channel error on recv error");
-                            continue;
+                                "Broadcast channel error (close) on recv - aborting");
+                            return;dbg!()
                         }
                     };
 
