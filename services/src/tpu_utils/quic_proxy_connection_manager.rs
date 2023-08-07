@@ -172,7 +172,7 @@ impl QuicProxyConnectionManager {
                         None => {
                             error!(
                                 "Broadcast channel error (close) on recv - aborting");
-                            return;dbg!()
+                            return;
                         }
                     };
 
@@ -191,7 +191,7 @@ impl QuicProxyConnectionManager {
                     for target_tpu_node in tpu_fanout_nodes {
                         Self::send_copy_of_txs_to_quicproxy(
                             &txs, &auto_connection,
-                        proxy_addr,
+                            proxy_addr,
                             target_tpu_node.tpu_address,
                             target_tpu_node.tpu_identity)
                         .await.unwrap();
