@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 #[test]
 fn roundtrip() {
+
     let payer = Keypair::from_base58_string(
         "rKiJ7H5UUp3JR18kNyTF1XPuwPKHEM7gMLWHZPWP5djrW1vSjfwjhvJrevxF9MPmUmN9gJMLHZdLMgc9ao78eKr",
     );
