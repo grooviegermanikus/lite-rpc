@@ -514,7 +514,7 @@ async fn start_literpc_client_direct_mode(
     tpu_connection_manager
         .update_connections(
             broadcast_sender.clone(),
-            connections_to_keep,
+            &connections_to_keep,
             identity_stakes,
             // note: tx_store is useless in this scenario as it is never changed; it's only used to check for duplicates
             DataCache::new_for_tests(),
@@ -626,7 +626,7 @@ async fn start_literpc_client_proxy_mode(
     quic_proxy_connection_manager
         .update_connection(
             transaction_receiver,
-            connections_to_keep,
+            &connections_to_keep,
             QUIC_CONNECTION_PARAMS,
         )
         .await;

@@ -65,7 +65,7 @@ impl QuicProxyConnectionManager {
         &self,
         broadcast_receiver: Receiver<SentTransactionInfo>,
         // for duration of this slot these tpu nodes will receive the transactions
-        connections_to_keep: HashMap<Pubkey, SocketAddr>,
+        connections_to_keep: &HashMap<Pubkey, SocketAddr>,
         connection_parameters: QuicConnectionParameters,
     ) {
         debug!(

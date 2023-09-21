@@ -200,13 +200,13 @@ impl TpuConnectionManager {
     pub async fn update_connections(
         &self,
         broadcast_sender: Arc<Sender<SentTransactionInfo>>,
-        connections_to_keep: HashMap<Pubkey, SocketAddr>,
+        connections_to_keep: &HashMap<Pubkey, SocketAddr>,
         identity_stakes: IdentityStakesData,
         data_cache: DataCache,
         connection_parameters: QuicConnectionParameters,
     ) {
         NB_CONNECTIONS_TO_KEEP.set(connections_to_keep.len() as i64);
-        for (identity, socket_addr) in &connections_to_keep {
+        for (identity, socket_addr) in connections_to_keep {
             if self.identity_to_active_connection.get(identity).is_none() {
                 trace!("added a connection for {}, {}", identity, socket_addr);
                 let active_connection = ActiveConnection::new(

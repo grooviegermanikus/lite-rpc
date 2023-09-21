@@ -149,7 +149,7 @@ impl TpuService {
                 tpu_connection_manager
                     .update_connections(
                         self.broadcast_sender.clone(),
-                        connections_to_keep,
+                        &connections_to_keep,
                         self.data_cache.identity_stakes.get_stakes().await,
                         self.data_cache.clone(),
                         self.config.quic_connection_params,
@@ -163,7 +163,7 @@ impl TpuService {
                 quic_proxy_connection_manager
                     .update_connection(
                         transaction_receiver,
-                        connections_to_keep,
+                        &connections_to_keep,
                         self.config.quic_connection_params,
                     )
                     .await;

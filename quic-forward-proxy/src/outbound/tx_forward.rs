@@ -12,19 +12,38 @@ use quinn::{
     ClientConfig, Endpoint, EndpointConfig, IdleTimeout, TokioRuntime, TransportConfig, VarInt,
 };
 use solana_sdk::quic::QUIC_MAX_TIMEOUT;
-use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
+use solana_streamer::nonblocking::quic::{ALPN_TPU_PROTOCOL_ID, ConnectionPeerType};
 use solana_streamer::tls_certificates::new_self_signed_tls_certificate;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::transaction::VersionedTransaction;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::RwLock;
+use solana_lite_rpc_core::quic_connection_utils::QuicConnectionParameters;
+use solana_lite_rpc_core::solana_utils::SerializableTransaction;
+use solana_lite_rpc_core::stores::data_cache::DataCache;
+use solana_lite_rpc_core::structures::identity_stakes::IdentityStakesData;
+use solana_lite_rpc_core::structures::transaction_sent_info::SentTransactionInfo;
+use solana_lite_rpc_services::tpu_utils::tpu_connection_manager::TpuConnectionManager;
 
 const MAX_PARALLEL_STREAMS: usize = 6;
 pub const PARALLEL_TPU_CONNECTION_COUNT: usize = 4;
 const AGENT_SHUTDOWN_IDLE: Duration = Duration::from_millis(2500); // ms; should be 4x400ms+buffer
+
+const QUIC_CONNECTION_PARAMS: QuicConnectionParameters = QuicConnectionParameters {
+    connection_timeout: Duration::from_secs(2),
+    connection_retry_count: 10,
+    finalize_timeout: Duration::from_secs(2),
+    max_number_of_connections: 8,
+    unistream_timeout: Duration::from_secs(2),
+    write_timeout: Duration::from_secs(2),
+    number_of_transactions_per_unistream: 10,
+};
+
 
 struct AgentHandle {
     pub tpu_address: SocketAddr,
@@ -47,12 +66,37 @@ pub async fn tx_forwarder(
 ) -> anyhow::Result<()> {
     info!("TPU Quic forwarder started");
 
+    // let (sender, _) = tokio::sync::broadcast::channel(config.maximum_transaction_in_queue);
+    let (sender, _) =
+        tokio::sync::broadcast::channel::<SentTransactionInfo>(1000);
+    let broadcast_sender = Arc::new(sender);
+
+
+    // TODO
+    let fanout_slots = 4;
+
+    let (certificate, key) = new_self_signed_tls_certificate(
+        &validator_identity.get_keypair_for_tls(),
+        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+    )
+        .expect("Failed to initialize QUIC connection certificates");
+
+    // TODO make copy of TpuConnectionManager in proxy crate an strip unused features
+    let tpu_connection_manager =
+        TpuConnectionManager::new(certificate, key, fanout_slots as usize).await;
+
+
+
+
     let endpoint = new_endpoint_with_validator_identity(validator_identity).await;
 
     let (broadcast_in, _) = tokio::sync::broadcast::channel::<Arc<ForwardPacket>>(1024);
 
     let mut agents: HashMap<SocketAddr, AgentHandle> = HashMap::new();
     let agent_shutdown_debouncer = Debouncer::new(Duration::from_millis(200));
+
+    // TODO implement cleanup
+    let mut connections_to_keep: HashMap<Pubkey, SocketAddr> = HashMap::new();
 
     loop {
         if exit_signal.load(Ordering::Relaxed) {
@@ -65,152 +109,49 @@ pub async fn tx_forwarder(
                 .await
                 .expect("channel closed unexpectedly"),
         );
-        let tpu_address = forward_packet.tpu_address;
 
-        agents.entry(tpu_address).or_insert_with(|| {
-            let agent_exit_signal = Arc::new(AtomicBool::new(false));
+        // TODO remove
+        let identity_stakes = IdentityStakesData {
+            peer_type: ConnectionPeerType::Staked,
+            stakes: 30,
+            min_stakes: 0,
+            max_stakes: 40,
+            total_stakes: 100,
+        };
 
-            for connection_idx in 0..PARALLEL_TPU_CONNECTION_COUNT {
-                let sharder =
-                    Sharder::new(connection_idx as u32, PARALLEL_TPU_CONNECTION_COUNT as u32);
-                let global_exit_signal = exit_signal.clone();
-                let endpoint_copy = endpoint.clone();
-                let agent_exit_signal_copy = agent_exit_signal.clone();
-                let mut per_connection_receiver = broadcast_in.subscribe();
-                tokio::spawn(async move {
-                    debug!(
-                        "Start Quic forwarder agent #{} for TPU {}",
-                        connection_idx, tpu_address
-                    );
-                    // get a copy of the packet from broadcast channel
-                    let auto_connection = AutoReconnect::new(endpoint_copy, tpu_address);
+        connections_to_keep.insert(forward_packet.tpu_identity, forward_packet.tpu_address);
+        println!("connections_to_keep: {:?}", connections_to_keep.len());
 
-                    // TODO check exit signal (using select! or maybe replace with oneshot)
-                    let _exit_signal_copy = global_exit_signal.clone();
-                    'tx_channel_loop: loop {
-                        let timeout_result = timeout_fallback(per_connection_receiver.recv()).await;
+        // TODO optimize
+        tpu_connection_manager
+            .update_connections(
+                broadcast_sender.clone(),
+                &connections_to_keep,
+                identity_stakes,
+                DataCache::new_for_tests(),
+                QUIC_CONNECTION_PARAMS, // TODO improve
+            )
+            .await;
 
-                        let maybe_packet = match timeout_result {
-                            Ok(recv) => recv,
-                            Err(_elapsed) => continue 'tx_channel_loop,
-                        };
+        for raw_tx in &forward_packet.transactions {
 
-                        if global_exit_signal.load(Ordering::Relaxed) {
-                            warn!("Caught global exit signal, {} remaining - stopping agent thread",
-                                per_connection_receiver.len());
-                            break 'tx_channel_loop;
-                        }
-                        if agent_exit_signal_copy.load(Ordering::Relaxed) {
-                            if per_connection_receiver.is_empty() {
-                                debug!("Caught exit signal for this agent ({} #{}) - stopping agent thread",
-                                    tpu_address, connection_idx);
-                                break 'tx_channel_loop;
-                            } else if auto_connection.is_permanent_dead().await {
-                                info!("Caught exit signal for this agent ({} #{}), {} remaining but connection is dead - stopping",
-                                tpu_address, connection_idx,
-                                per_connection_receiver.len());
-                                break 'tx_channel_loop;
-                            } else {
-                                trace!("Caught exit signal for this agent ({} #{}), {} remaining - continue",
-                                tpu_address, connection_idx,
-                                per_connection_receiver.len());
-                            }
+            // TODO add to ForwardPacket
+            let tx = bincode::deserialize::<VersionedTransaction>(&raw_tx).unwrap();
 
-                        }
+            let tsi = SentTransactionInfo {
+                signature: tx.get_signature().to_string(),
+                slot: 4242,
+                transaction: raw_tx.clone(),
+                last_valid_block_height: 999,
+            };
 
-                        if let Err(_recv_error) = maybe_packet {
-                            break 'tx_channel_loop;
-                        }
+            // send_transaction
+            broadcast_sender.send(tsi).unwrap();
 
-                        let packet = maybe_packet.unwrap();
-
-                        if packet.tpu_address != tpu_address {
-                            continue 'tx_channel_loop;
-                        }
-                        if !sharder.matching(packet.shard_hash) {
-                            continue 'tx_channel_loop;
-                        }
-
-                        if auto_connection.is_permanent_dead().await {
-                            warn!("Agent ({} #{}) connection permanently dead, {} remaining - stopping",
-                                tpu_address, connection_idx,
-                                per_connection_receiver.len());
-                            break 'tx_channel_loop;
-                        }
-
-                        let mut transactions_batch: Vec<Vec<u8>> = packet.transactions.clone();
-
-                        'more: while let Ok(more) = per_connection_receiver.try_recv() {
-                            if more.tpu_address != tpu_address {
-                                continue 'more;
-                            }
-                            if !sharder.matching(more.shard_hash) {
-                                continue 'more;
-                            }
-                            transactions_batch.extend(more.transactions.clone());
-                        }
-
-                        debug!(
-                            "forwarding transaction batch of size {} to address {}",
-                            transactions_batch.len(),
-                            packet.tpu_address
-                        );
-
-                        let result = timeout_fallback(send_tx_batch_to_tpu(
-                            &auto_connection,
-                            &transactions_batch,
-                        ))
-                        .await
-                        .context(format!(
-                            "send txs to tpu node {}",
-                            auto_connection.target_address
-                        ));
-
-                        match result {
-                            Ok(()) => {
-                                debug!("send_txs_to_tpu_static sent {}", transactions_batch.len());
-                                debug!(
-                                    "Outbound connection stats: {}",
-                                    &auto_connection.connection_stats().await
-                                );
-                            }
-                            Err(err) => {
-                                warn!("got send_txs_to_tpu_static error {} - loop over errors", err);
-                            }
-                        }
-                    } // -- while all packtes from channel
+        } // all txs in packet
 
 
-                    auto_connection.force_shutdown().await;
-                    warn!(
-                        "Quic forwarder agent #{} for TPU {} exited; shut down connection",
-                        connection_idx, tpu_address
-                    );
-                }); // -- spawned thread for one connection to one TPU
-            } // -- for parallel connections to one TPU
 
-            let now = Instant::now();
-            AgentHandle {
-                tpu_address,
-                agent_exit_signal,
-                last_used_at: Arc::new(RwLock::new(now))
-            }
-        }); // -- new agent
-
-        let agent = agents.get(&tpu_address).unwrap();
-        agent.touch().await;
-
-        if agent_shutdown_debouncer.can_fire() {
-            cleanup_agents(&mut agents, &tpu_address).await;
-        }
-
-        if broadcast_in.len() > 5 {
-            debug!("tx-forward queue len: {}", broadcast_in.len())
-        }
-
-        broadcast_in
-            .send(forward_packet)
-            .expect("send must succeed");
     } // -- loop over transactions from upstream channels
 
     // not reachable
