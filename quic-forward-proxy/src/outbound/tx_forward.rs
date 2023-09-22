@@ -34,7 +34,7 @@ const MAX_PARALLEL_STREAMS: usize = 6;
 pub const PARALLEL_TPU_CONNECTION_COUNT: usize = 4;
 const AGENT_SHUTDOWN_IDLE: Duration = Duration::from_millis(2500); // ms; should be 4x400ms+buffer
 
-const QUIC_CONNECTION_PARAMS: QuicConnectionParameters = QuicConnectionParameters {
+pub const QUIC_CONNECTION_PARAMS: QuicConnectionParameters = QuicConnectionParameters {
     connection_timeout: Duration::from_secs(2),
     connection_retry_count: 10,
     finalize_timeout: Duration::from_secs(2),
@@ -135,7 +135,7 @@ pub async fn tx_forwarder(
 
         for raw_tx in &forward_packet.transactions {
 
-            // TODO add to ForwardPacket
+            // TODO remove - duplicate to .convert()
             let tx = bincode::deserialize::<VersionedTransaction>(&raw_tx).unwrap();
 
             let tsi = SentTransactionInfo {
