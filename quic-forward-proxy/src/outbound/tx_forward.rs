@@ -59,7 +59,7 @@ impl AgentHandle {
 }
 
 // takes transactions from upstream clients and forwards them to the TPU
-pub async fn tx_forwarder(
+pub async fn ___tx_forwarder(
     validator_identity: ValidatorIdentity,
     mut transaction_channel: Receiver<ForwardPacket>,
     exit_signal: Arc<AtomicBool>,
