@@ -71,6 +71,11 @@ impl TpuForwardingRequest {
         self.transactions[0].0.hash(&mut hasher);
         hasher.finish()
     }
+
+    /// time the packet spent in proxy
+    pub fn elapsed_us(&self) -> u128 {
+        self.received_timestamp.elapsed().as_micros()
+    }
 }
 
 

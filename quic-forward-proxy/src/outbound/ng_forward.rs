@@ -70,7 +70,7 @@ pub async fn ng_forwarder(
             .await;
 
         for raw_tx in forward_packet.get_transaction_bytes() {
-            tpu_connection_manager.send_transaction(raw_tx);
+            tpu_connection_manager.send_transaction(raw_tx, forward_packet.elapsed_us());
         }
 
     } // all txs in packet

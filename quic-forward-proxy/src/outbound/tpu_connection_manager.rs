@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 
 use dashmap::DashMap;
-use log::{debug, error};
+use log::{debug, error, info};
 use prometheus::{core::GenericGauge, opts, register_int_gauge};
 use quinn::Endpoint;
 use solana_lite_rpc_core::{
@@ -49,7 +49,7 @@ pub type WireTransaction = Vec<u8>;
 
 #[derive(Debug, Clone)]
 pub enum BroadcastMessage {
-    Transaction(WireTransaction),
+    Transaction((WireTransaction, u128)),
     Shutdown(Pubkey),
 }
 
@@ -97,7 +97,7 @@ impl ActiveConnection {
                 broadcast_message = broadcast_receiver.recv() => {
 
                     match broadcast_message {
-                        Ok(BroadcastMessage::Transaction(tx_raw)) => {
+                        Ok(BroadcastMessage::Transaction((tx_raw, elapsed_time))) => {
                             last_used.update();
                             let PooledConnection {
                                 connection,
@@ -115,6 +115,7 @@ impl ActiveConnection {
                                 let _permit = permit;
                                 NB_QUIC_TASKS.inc();
                                 connection.send_transaction(tx_raw).await;
+                                info!("elapsed time for transaction {} us", elapsed_time);
                                 NB_QUIC_TASKS.dec();
                             });
 
@@ -184,8 +185,8 @@ pub struct TpuConnectionManager {
 }
 
 impl TpuConnectionManager {
-    pub fn send_transaction(&self, transaction: Vec<u8>) {
-        self.broadcast_sender.send(BroadcastMessage::Transaction(transaction))
+    pub fn send_transaction(&self, transaction: Vec<u8>, elapsed_us: u128) {
+        self.broadcast_sender.send(BroadcastMessage::Transaction((transaction, elapsed_us)))
             .expect("failed to send to broadcast");
     }
 }
