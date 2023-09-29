@@ -1,4 +1,4 @@
-use crate::proxy_request_format::TpuForwardingRequest;
+use crate::proxy_request_format::{TpuForwardingRequest, TpuForwardingRequestWire};
 use crate::quic_util::connection_stats;
 use crate::tls_config_provider_server::ProxyTlsConfigProvider;
 use crate::tls_self_signed_pair_generator::SelfSignedTlsConfigProvider;
@@ -11,6 +11,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
+use tokio::time::Instant;
 
 // note: setting this to "1" did not make a difference!
 // solana server sets this to 256
@@ -103,10 +104,13 @@ impl ProxyListener {
                     let forwarder_channel_copy = forwarder_channel.clone();
                     tokio::spawn(async move {
                         let raw_request = recv_stream.read_to_end(10_000_000).await.unwrap();
+                        let now = Instant::now();
 
-                        let proxy_request =
-                            TpuForwardingRequest::try_deserialize_from_wire_format(&raw_request)
+                        let proxy_request_wire =
+                            TpuForwardingRequestWire::try_deserialize_from_wire_format(&raw_request)
                                 .unwrap();
+
+                        let proxy_request = TpuForwardingRequest::new(proxy_request_wire, now);
 
                         if proxy_request.get_tpu_nodes().is_empty() {
                             warn!("no tpu nodes in request - skip");

@@ -9,6 +9,7 @@ use std::fmt;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
+use tokio::time::Instant;
 
 ///
 /// lite-rpc to proxy wire format
@@ -26,12 +27,53 @@ pub struct TpuNode {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TpuForwardingRequest {
+pub struct TpuForwardingRequestWire {
     format_version: u16,
     // note: this data gets stale
     tpu_nodes: Vec<TpuNode>,
     transactions: Vec<TxData>,
 }
+
+#[derive(Debug, Clone)]
+pub struct TpuForwardingRequest {
+    // note: this data gets stale
+    tpu_nodes: Vec<TpuNode>,
+    transactions: Vec<TxData>,
+    received_timestamp: Instant,
+}
+
+impl TpuForwardingRequest {
+    pub fn new(
+        wire_request: TpuForwardingRequestWire,
+        received_timestamp: Instant,
+    ) -> Self {
+        TpuForwardingRequest {
+            tpu_nodes: wire_request.tpu_nodes,
+            transactions: wire_request.transactions,
+            received_timestamp,
+        }
+    }
+
+    pub fn get_tpu_nodes(&self) -> &Vec<TpuNode> {
+        &self.tpu_nodes
+    }
+
+    pub fn get_transaction_bytes(&self) -> Vec<Vec<u8>> {
+        self.transactions
+            .iter()
+            .map(|tx| tx.1.clone())
+            .collect_vec()
+    }
+
+    pub fn get_hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        // note: assumes that there are transactions with >=0 signatures
+        self.transactions[0].0.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
+
 
 impl Display for TpuForwardingRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -43,12 +85,12 @@ impl Display for TpuForwardingRequest {
     }
 }
 
-impl TpuForwardingRequest {
+impl TpuForwardingRequestWire {
     pub fn new(
         tpu_fanout_nodes: Vec<(SocketAddr, Pubkey)>,
         transactions: Vec<VersionedTransaction>,
     ) -> Self {
-        TpuForwardingRequest {
+        TpuForwardingRequestWire {
             format_version: FORMAT_VERSION1,
             tpu_nodes: tpu_fanout_nodes
                 .iter()
@@ -73,8 +115,8 @@ impl TpuForwardingRequest {
 
     pub fn try_deserialize_from_wire_format(
         raw_proxy_request: &[u8],
-    ) -> anyhow::Result<TpuForwardingRequest> {
-        let request = bincode::deserialize::<TpuForwardingRequest>(raw_proxy_request);
+    ) -> anyhow::Result<TpuForwardingRequestWire> {
+        let request = bincode::deserialize::<TpuForwardingRequestWire>(raw_proxy_request);
 
         if let Ok(ref req) = request {
             assert_eq!(req.format_version, FORMAT_VERSION1);
@@ -85,21 +127,4 @@ impl TpuForwardingRequest {
             .map_err(anyhow::Error::from)
     }
 
-    pub fn get_tpu_nodes(&self) -> &Vec<TpuNode> {
-        &self.tpu_nodes
-    }
-
-    pub fn get_transaction_bytes(&self) -> Vec<Vec<u8>> {
-        self.transactions
-            .iter()
-            .map(|tx| tx.1.clone())
-            .collect_vec()
-    }
-
-    pub fn get_hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        // note: assumes that there are transactions with >=0 signatures
-        self.transactions[0].0.hash(&mut hasher);
-        hasher.finish()
-    }
 }
