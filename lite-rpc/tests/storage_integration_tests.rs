@@ -136,10 +136,14 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut block_notifier = block_notifier;
 
-        let mut collisions = [0u8; u16::MAX as usize / 8];
-        let mut collisions2 = [0u8; u16::MAX as usize / 8];
+        let mut collisions = vec![0_u8;  u32::MAX as usize / 8];
+        let mut collisions2 = vec![0_u8;  u32::MAX as usize / 8];
 
-        let mut seen = HashMap::<u16, Pubkey>::new();
+        info!("ALLOCATED ALOT OF MEM");
+
+        const USE_FULL_COLLISSION_MAP: bool = false;
+        let mut seen = HashMap::<u32, Pubkey>::new();
+        let mut count = 0;
 
         loop {
             match block_notifier.recv().await {
@@ -152,13 +156,14 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
                     );
 
 
+                    let started = Instant::now();
                     for tx in block.transactions {
                         // info!("tx {}", tx.signature);
 
                         for acc in tx.static_account_keys {
                             // info!("- {}", acc);
-                            let hash: u16 = hash16(acc);
-                            let hash2: u16 = hash16_check(acc);
+                            let hash: u32 = hash32(acc);
+                            let hash2: u32 = hash32_check(acc);
 
 
                             let ptr = &mut collisions[hash as usize / 8];
@@ -170,10 +175,12 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
                                 }
                             }
 
-                            let inserted = seen.insert(hash, acc);
-                            if let Some(dupe) = inserted {
-                                if dupe != acc {
-                                    panic!("collision hash key {}: {} -> {}", hash, acc, dupe);
+                            if USE_FULL_COLLISSION_MAP {
+                                let inserted = seen.insert(hash, acc);
+                                if let Some(dupe) = inserted {
+                                    if dupe != acc {
+                                        panic!("collision hash key {}: {} -> {}", hash, acc, dupe);
+                                    }
                                 }
                             }
 
@@ -181,14 +188,18 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
                             *ptr |= 1 << (hash % 8);
 
 
-                            // failes with 436/524
-                            info!("ones: {}", count_ones(&collisions));
-                            info!("ones2: {}", count_ones(&collisions2));
+                            // failes with 436/524 (at 16 bit)
+                            // if count % 1000 == 0 {
+                            //     info!("ones: {}", count_ones(collisions.as_ref()));
+                            //     info!("ones2: {}", count_ones(collisions2.as_ref()));
+                            // }
 
                         }
-                    }
+                    } // -- all txs in block
 
+                    info!("hashing took {}ms", started.elapsed().as_secs_f64() * 1000.0);
 
+                    count += 1;
                 } // -- Ok
                 Err(RecvError::Lagged(missed_blocks)) => {
                     warn!(
@@ -214,6 +225,20 @@ fn hash16(p0: Pubkey) -> u16 {
 fn hash16_check(p0: Pubkey) -> u16 {
     let hash1: Hash = hash(p0.as_ref());
     hash1.to_bytes()[HASH_BYTES - 1] as u16 + (hash1.to_bytes()[HASH_BYTES - 2] as u16) * 256
+}
+
+fn hash32(p0: Pubkey) -> u32 {
+    let hash1: Hash = hash(p0.as_ref());
+    let mut dst = [0u8; 4];
+    dst.clone_from_slice(&hash1.to_bytes()[0..4]);
+    u32::from_be_bytes(dst)
+}
+
+fn hash32_check(p0: Pubkey) -> u32 {
+    let hash1: Hash = hash(p0.as_ref());
+    let mut dst = [0u8; 4];
+    dst.clone_from_slice(&hash1.to_bytes()[4..8]);
+    u32::from_be_bytes(dst)
 }
 
 fn count_ones(data: &[u8]) -> u32 {
