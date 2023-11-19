@@ -54,7 +54,7 @@ async fn storage_test() {
 
     let epoch_data = EpochCache::bootstrap_epoch(&rpc_client).await.unwrap();
 
-    let block_storage = Arc::new(PostgresBlockStore::new(epoch_data).await);
+    // let block_storage = Arc::new(PostgresBlockStore::new(epoch_data).await);
 
     // let jh1 = storage_listen(blocks_notifier.resubscribe(), block_storage.clone());
     // let jh2 = block_debug_listen(blocks_notifier.resubscribe());
