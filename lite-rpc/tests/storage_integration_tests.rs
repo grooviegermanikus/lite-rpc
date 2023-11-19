@@ -18,6 +18,7 @@ use solana_rpc_client::nonblocking::rpc_client::RpcClient;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use chrono::format::format_item;
+use countmap::CountMap;
 use csv::WriterBuilder;
 use fxhash::FxHasher32;
 use serde::{Deserialize, Serialize};
@@ -157,6 +158,8 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
         const USE_FULL_COLLISSION_MAP: bool = false;
         let mut seen = HashMap::<u32, Pubkey>::new();
 
+        let mut count_by_key = CountMap::<Pubkey>::new();
+
         let mut csv_writer = WriterBuilder::new().from_path(format!("collissions.csv")).unwrap();
         let mut slots = HashSet::new();
 
@@ -181,7 +184,7 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
                             // info!("- {}", acc);
                             let hash: u32 = hash32(&acc);
                             let hash2: u32 = hash32_check(&acc);
-
+                            count_by_key.insert_or_increment(acc.clone());
 
                             csv_writer.serialize(CsvRow {
                                 account_pubkey: acc.to_string().as_str(),
@@ -220,6 +223,10 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
                             // }
 
                             count += 1;
+
+                            if count % 10000 == 0 {
+                                info!("Distinct account seen so far: {}", count_by_key.len());
+                            }
 
                         }
                     } // -- all txs in block
