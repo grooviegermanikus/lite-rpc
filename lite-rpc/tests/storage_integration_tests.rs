@@ -166,6 +166,7 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
         let mut csv_writer = WriterBuilder::new().from_path(format!("collissions.csv")).unwrap();
         let mut slots = HashSet::new();
         let mut num_accounts: Vec<usize> = Vec::new();
+        let mut matrix = MatrixCompressionChunk::new();
 
         loop {
             match block_notifier.recv().await {
@@ -186,11 +187,11 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
                             continue;
                         }
                         
-                        info!("tx {}", tx.signature);
+                        // info!("tx {}", tx.signature);
                         num_accounts.push(tx.static_account_keys.len());
 
                         for acc in &tx.static_account_keys {
-                            info!("- {}", acc);
+                            // info!("- {}", acc);
                             let hash: u32 = hash32(&acc);
                             let hash2: u32 = hash32_check(&acc);
                             count_by_key.insert_or_increment(acc.clone());
@@ -244,18 +245,20 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
 
                             }
 
-                            if slots.len() == 1000 {
-                                info!("Compress {} slots", slots.len());
-                                let mut matrix = MatrixCompressionChunk::new();
-                                let sig = Pubkey::from_str(&tx.signature).unwrap();
-                                matrix.insert(&sig, &tx.static_account_keys);
 
+                        } // -- all accounts
 
-                            }
+                        let sig = Signature::from_str(&tx.signature).unwrap();
+                        matrix.insert(&sig, &tx.static_account_keys);
 
-
-                        }
                     } // -- all txs in block
+
+                    if slots.len() % 20 == 0 {
+                        // Compressed 139 slots to 4092980 bytes
+                        info!("Compressed {} slots to {} bytes, matrix stats {}",
+                            slots.len(), bincode::serialize(&matrix).unwrap().len(),
+                            matrix.stats());
+                    }
 
                     info!("hashing took {:.2}ms for {} keys", started.elapsed().as_secs_f64() * 1000.0, count);
                     // info!("ones: {}", count_ones(collisions.as_ref()));
@@ -296,11 +299,11 @@ impl MatrixCompressionChunk {
         let gh = hash32_check(&account_key);
         self.global_collision_protection.binary_search(&gh).is_ok()
     }
-    pub fn insert(&mut self, tx_sig: &Pubkey, account_keys: &[Pubkey]) {
+    pub fn insert(&mut self, tx_sig: &Signature, account_keys: &[Pubkey]) {
 
         let sorted_hashed_accounts = account_keys.iter().map(|acc| hash32(&acc)).sorted().collect_vec();
 
-        info!("sorted_hashed_accounts= {:?}", sorted_hashed_accounts);
+        // trace!("sorted_hashed_accounts= {:?}", sorted_hashed_accounts);
 
         self.txs.push(CompressedTransaction {
             tx_sig: tx_sig.clone(),
@@ -318,10 +321,23 @@ impl MatrixCompressionChunk {
             }
         }
 
+
     }
 
-    pub fn get_signatures_for_address(&self, account_key: &Pubkey) -> Vec<Pubkey> {
+    pub fn stats(&self) -> String {
+        let (sum, cnt) = self.txs.iter()
+            .map(|tx| tx.acc_compressed.len())
+            .fold((0, 0), |acc, n| {
+                (acc.0 + n, acc.1 + 1)
+            });
+        let avg = sum as f64 / cnt as f64;
+        // Compressed 60 slots to 1591916 bytes, matrix stats 13278 txs, 11.19 acc_avg, 10379 global hashes
+        format!("{} txs, {:.2} acc_avg, {} global_acc_hashes", self.txs.len(), avg, self.global_collision_protection.len())
+    }
+
+    pub fn get_signatures_for_address(&self, account_key: &Pubkey) -> Vec<Signature> {
         if !self.is_in_domain(account_key) {
+            warn!("Requested account key which was not compressed: {}", account_key);
             // account pub key not mapped
             return vec![];
         }
@@ -339,7 +355,7 @@ impl MatrixCompressionChunk {
 
 #[derive(Serialize)]
 struct CompressedTransaction {
-    tx_sig: Pubkey,
+    tx_sig: Signature,
     // must be sorted!
     acc_compressed: Vec<u32>,
 }
@@ -359,7 +375,7 @@ fn insert_into_matrix() {
     tracing_subscriber::fmt::init();
 
     let mut matrix = MatrixCompressionChunk::new();
-    let tx_sig = Pubkey::from_str("Bm8rtweCQ19ksNebrLY92H7x4bCaeDJSSmEeWqkdCeop").unwrap();
+    let tx_sig = Signature::from_str("Bm8rtweCQ19ksNebrLY92H7x4bCaeDJSSmEeWqkdCeop").unwrap();
     let account1 = Pubkey::from_str("1111111jepwNWbYG87sgwnBbUJnQHrPiUJzMpqJXZ").unwrap();
     let account2 = Pubkey::from_str("1111111k4AYMctpyJakWNvGcte6tR8BLyZw54R8qu").unwrap();
 
@@ -378,13 +394,13 @@ fn gsfa() {
     let account2 = Pubkey::from_str("1111111k4AYMctpyJakWNvGcte6tR8BLyZw54R8qu").unwrap();
     let account3 = Pubkey::from_str("1111111k4AYMctpyJakWNvGcte6tR8BLyZw54R8qq").unwrap();
 
-    let tx1_sig = Pubkey::from_str("Bm8rtweCQ19ksNebrLY92H7x4bCaeDJSSmEeWqkdCeop").unwrap();
+    let tx1_sig = Signature::from_str("Bm8rtweCQ19ksNebrLY92H7x4bCaeDJSSmEeWqkdCeop").unwrap();
     matrix.insert(&tx1_sig, &[account1, account2]);
-    let tx2_sig = Pubkey::from_str("Bm8rtweCQ19ksNebrLY92H7x4bCaeDJSSmEeWqkdCeoq").unwrap();
+    let tx2_sig = Signature::from_str("Bm8rtweCQ19ksNebrLY92H7x4bCaeDJSSmEeWqkdCeoq").unwrap();
     matrix.insert(&tx2_sig, &[account1]);
 
     for _i in 0..100 {
-        let tx_rnd = Pubkey::new_unique();
+        let tx_rnd = Signature::new_unique();
         matrix.insert(&tx_rnd, &[account3]);
     }
 
@@ -404,7 +420,7 @@ fn gsfa() {
     // sig: 32 bytes
     // each account costs 4 bytes
     for _i in 0..1000 {
-        let tx_rnd = Pubkey::new_unique();
+        let tx_rnd = Signature::new_unique();
         matrix.insert(&tx_rnd, &[account3]);
     }
 
