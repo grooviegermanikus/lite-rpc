@@ -2,6 +2,7 @@ use std::backtrace::Backtrace;
 use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
+use std::mem::size_of;
 use std::panic::PanicInfo;
 use std::process;
 use std::str::FromStr;
@@ -180,7 +181,7 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
 
                     let started = Instant::now();
                     let mut count = 0;
-                    for tx in block.transactions {
+                    for tx in &block.transactions {
                         if is_vote(&tx) {
                             continue;
                         }
@@ -188,7 +189,7 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
                         info!("tx {}", tx.signature);
                         num_accounts.push(tx.static_account_keys.len());
 
-                        for acc in tx.static_account_keys {
+                        for acc in &tx.static_account_keys {
                             info!("- {}", acc);
                             let hash: u32 = hash32(&acc);
                             let hash2: u32 = hash32_check(&acc);
@@ -212,8 +213,8 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
                             }
 
                             if USE_FULL_COLLISSION_MAP {
-                                let inserted = seen.insert(hash, acc);
-                                if let Some(dupe) = inserted {
+                                let inserted = seen.insert(hash, acc.clone());
+                                if let Some(ref dupe) = inserted {
                                     if dupe != acc {
                                         panic!("collision hash key {}: {} -> {}", hash, acc, dupe);
                                     }
@@ -243,6 +244,16 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
 
                             }
 
+                            if slots.len() == 1000 {
+                                info!("Compress {} slots", slots.len());
+                                let mut matrix = MatrixCompressionChunk::new();
+                                let sig = Pubkey::from_str(&tx.signature).unwrap();
+                                matrix.insert(&sig, &tx.static_account_keys);
+
+
+                            }
+
+
                         }
                     } // -- all txs in block
 
@@ -267,6 +278,7 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
 }
 
 // n txs x m distinct accounts
+#[derive(Serialize)]
 struct MatrixCompressionChunk {
     txs: Vec<CompressedTransaction>,
     // TODO is u32 enough?
@@ -325,6 +337,7 @@ impl MatrixCompressionChunk {
     }
 }
 
+#[derive(Serialize)]
 struct CompressedTransaction {
     tx_sig: Pubkey,
     // must be sorted!
@@ -363,17 +376,39 @@ fn gsfa() {
 
     let account1 = Pubkey::from_str("1111111jepwNWbYG87sgwnBbUJnQHrPiUJzMpqJXZ").unwrap();
     let account2 = Pubkey::from_str("1111111k4AYMctpyJakWNvGcte6tR8BLyZw54R8qu").unwrap();
+    let account3 = Pubkey::from_str("1111111k4AYMctpyJakWNvGcte6tR8BLyZw54R8qq").unwrap();
 
     let tx1_sig = Pubkey::from_str("Bm8rtweCQ19ksNebrLY92H7x4bCaeDJSSmEeWqkdCeop").unwrap();
     matrix.insert(&tx1_sig, &[account1, account2]);
     let tx2_sig = Pubkey::from_str("Bm8rtweCQ19ksNebrLY92H7x4bCaeDJSSmEeWqkdCeoq").unwrap();
     matrix.insert(&tx2_sig, &[account1]);
 
+    for _i in 0..100 {
+        let tx_rnd = Pubkey::new_unique();
+        matrix.insert(&tx_rnd, &[account3]);
+    }
+
     let found = matrix.get_signatures_for_address(&Pubkey::from_str("1111111jepwNWbYG87sgwnBbUJnQHrPiUJzMpqJXZ").unwrap());
     assert_eq!(2, found.len());
 
     let found = matrix.get_signatures_for_address(&Pubkey::from_str("1111111k4AYMctpyJakWNvGcte6tR8BLyZw54R8qu").unwrap());
     assert_eq!(1, found.len());
+
+    let json = serde_json::to_string(&matrix).unwrap();
+
+    info!("json {}", json);
+
+    assert_eq!(4520, bincode::serialize(&matrix).unwrap().len());
+
+    // 44 bytes each
+    // sig: 32 bytes
+    // each account costs 4 bytes
+    for _i in 0..1000 {
+        let tx_rnd = Pubkey::new_unique();
+        matrix.insert(&tx_rnd, &[account3]);
+    }
+
+    assert_eq!(48520, bincode::serialize(&matrix).unwrap().len());
 }
 
 
