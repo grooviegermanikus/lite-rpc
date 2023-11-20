@@ -258,10 +258,13 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
 
                     if slots.len() % 20 == 0 {
                         // Compressed 139 slots to 4092980 bytes
+                        let compressed = bincode::serialize(&matrix).unwrap().len();
                         info!("Compressed {} slots to {} bytes, matrix stats {}",
-                            slots.len(), bincode::serialize(&matrix).unwrap().len(),
+                            slots.len(), compressed,
                             matrix.stats());
-                        info!("Uncompressed naiv size: {}", bincode::serialize(&matrix_naiv).unwrap().len());
+                        let uncompressed = bincode::serialize(&matrix_naiv).unwrap().len();
+                        info!("Uncompressed naiv size: {}", uncompressed);
+                        info!("Compression Ratio {:.2}%", 100.0 * ((compressed as f64 / uncompressed as f64)));
                     }
 
                     info!("hashing took {:.2}ms for {} keys", started.elapsed().as_secs_f64() * 1000.0, count);
