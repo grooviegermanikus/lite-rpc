@@ -167,6 +167,7 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
         let mut slots = HashSet::new();
         let mut num_accounts: Vec<usize> = Vec::new();
         let mut matrix = MatrixCompressionChunk::new();
+        let mut matrix_naiv = MatrixNaive::new();
 
         loop {
             match block_notifier.recv().await {
@@ -250,6 +251,8 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
 
                         let sig = Signature::from_str(&tx.signature).unwrap();
                         matrix.insert(&sig, &tx.static_account_keys);
+                        matrix_naiv.insert(&sig, &tx.static_account_keys);
+
 
                     } // -- all txs in block
 
@@ -258,6 +261,7 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
                         info!("Compressed {} slots to {} bytes, matrix stats {}",
                             slots.len(), bincode::serialize(&matrix).unwrap().len(),
                             matrix.stats());
+                        info!("Uncompressed naiv size: {}", bincode::serialize(&matrix_naiv).unwrap().len());
                     }
 
                     info!("hashing took {:.2}ms for {} keys", started.elapsed().as_secs_f64() * 1000.0, count);
@@ -280,11 +284,30 @@ fn compress_account_ids(block_notifier: BlockStream) -> JoinHandle<()> {
     })
 }
 
+#[derive(Serialize)]
+struct MatrixNaive {
+    mappings: Vec<(Signature, Pubkey)>,
+}
+
+impl MatrixNaive {
+    pub fn new() -> Self {
+        Self {
+            mappings: Vec::new(),
+        }
+    }
+    pub fn insert(&mut self, tx_sig: &Signature, account_keys: &[Pubkey]) {
+        for acc in account_keys {
+            self.mappings.push((tx_sig.clone(), acc.clone()));
+        }
+    }
+}
+
 // n txs x m distinct accounts
 #[derive(Serialize)]
 struct MatrixCompressionChunk {
     txs: Vec<CompressedTransaction>,
     // TODO is u32 enough?
+    // note: keeping this redundant hash allows to have smaller account hashes
     global_collision_protection: Vec<u32>,
 }
 
@@ -394,9 +417,12 @@ fn gsfa() {
     let account2 = Pubkey::from_str("1111111k4AYMctpyJakWNvGcte6tR8BLyZw54R8qu").unwrap();
     let account3 = Pubkey::from_str("1111111k4AYMctpyJakWNvGcte6tR8BLyZw54R8qq").unwrap();
 
-    let tx1_sig = Signature::from_str("Bm8rtweCQ19ksNebrLY92H7x4bCaeDJSSmEeWqkdCeop").unwrap();
+    println!("txsig {}", Signature::new_unique());
+
+    let tx1_sig = Signature::from_str("2Ua6vFHL2787jpoVzPen9L7Kz9xbpAxxyWbiJ6HbK8m4puqFc2MebNGTJPZwgxdLKa9PGbca3vVhBNg3vi46YVQF").unwrap();
+    assert_eq!(64, bincode::serialize(&tx1_sig).unwrap().len());
     matrix.insert(&tx1_sig, &[account1, account2]);
-    let tx2_sig = Signature::from_str("Bm8rtweCQ19ksNebrLY92H7x4bCaeDJSSmEeWqkdCeoq").unwrap();
+    let tx2_sig = Signature::from_str("4S9ecerF4DUh7motq9Gw7gEKVNfVfYd1SwYLFUEfm7TGwdui6nmLTuRzoYorDx1Ray55BPpNYqPbFiaavbfJcJwu").unwrap();
     matrix.insert(&tx2_sig, &[account1]);
 
     for _i in 0..100 {
@@ -414,17 +440,17 @@ fn gsfa() {
 
     info!("json {}", json);
 
-    assert_eq!(4520, bincode::serialize(&matrix).unwrap().len());
+    assert_eq!(7784, bincode::serialize(&matrix).unwrap().len());
 
-    // 44 bytes each
-    // sig: 32 bytes
-    // each account costs 4 bytes
+    // 76 bytes each
+    // sig: 64 bytes
+    // each extra account costs 4 bytes
     for _i in 0..1000 {
         let tx_rnd = Signature::new_unique();
         matrix.insert(&tx_rnd, &[account3]);
     }
 
-    assert_eq!(48520, bincode::serialize(&matrix).unwrap().len());
+    assert_eq!(83784, bincode::serialize(&matrix).unwrap().len());
 }
 
 
