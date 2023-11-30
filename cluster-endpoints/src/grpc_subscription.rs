@@ -43,7 +43,7 @@ fn process_block(
     block: SubscribeUpdateBlock,
     commitment_config: CommitmentConfig,
 ) -> ProducedBlock {
-    debug!("Receiving block {} size from geyser of size {}", block.slot, block.encoded_len());
+    debug!("Receiving block {} from geyser of size {}", block.slot, block.encoded_len());
 
     let txs: Vec<TransactionInfo> = block
         .transactions

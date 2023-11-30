@@ -106,6 +106,7 @@ impl VoteStore {
     ) -> anyhow::Result<()> {
         if new_account.lamports == 0 {
             //self.remove_from_store(&new_account.pubkey, new_account.slot);
+            // isn't that dangerous if .add_value calls are mixed wrt force_in_update?
             self.votes.add_value(
                 UpdateAction::Remove(new_account.pubkey, new_account.slot),
                 new_account.slot > current_end_epoch_slot,

@@ -5,7 +5,7 @@ use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;
 use solana_lite_rpc_core::stores::block_information_store::BlockInformation;
 use solana_lite_rpc_core::stores::data_cache::DataCache;
-use solana_lite_rpc_core::structures::leaderschedule::GetVoteAccountsConfig;
+use solana_lite_rpc_core::structures::leaderschedule::{CalculatedSchedule, GetVoteAccountsConfig, LeaderScheduleData};
 use solana_lite_rpc_core::types::SlotStream;
 use solana_rpc_client::nonblocking::rpc_client::RpcClient;
 use solana_rpc_client_api::response::RpcVoteAccountStatus;
@@ -13,6 +13,7 @@ use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::sync::Arc;
+use solana_program::epoch_schedule::EpochSchedule;
 use tokio::sync::mpsc::Receiver;
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::geyser::CommitmentLevel;
@@ -20,6 +21,7 @@ use yellowstone_grpc_proto::prelude::subscribe_update::UpdateOneof;
 use yellowstone_grpc_proto::prelude::SubscribeRequestFilterAccounts;
 use yellowstone_grpc_proto::prelude::SubscribeUpdate;
 use yellowstone_grpc_proto::tonic::Status;
+use solana_lite_rpc_core::structures::epoch::Epoch;
 
 mod account;
 mod bootstrap;
@@ -35,8 +37,59 @@ const VOTESTORE_INITIAL_CAPACITY: usize = 600000;
 
 type Slot = u64;
 
+pub struct DataCacheWrapper(DataCache);
+
+impl DataCacheWrapper {
+
+    pub fn new(data_cache: DataCache) -> Self {
+        Self(data_cache)
+    }
+
+    async fn get_current_epoch(&self, commitment: CommitmentConfig) -> Epoch {
+        self.0.get_current_epoch(commitment).await
+    }
+
+    pub async fn get_current_confirmed_slot(&self) -> u64 {
+        let commitment = CommitmentConfig::confirmed();
+        let BlockInformation { slot, .. } = self.0
+            .block_information_store
+            .get_latest_block(commitment)
+            .await;
+        slot
+    }
+
+    pub async fn get_latest_block(&self, commitment: CommitmentConfig) -> BlockInformation {
+        self.0.block_information_store.get_latest_block(commitment).await
+    }
+
+    pub async fn update_leader_schedule(&self, schedule_data: CalculatedSchedule) {
+        let mut data_schedule = self.0.leader_schedule.write().await;
+        *data_schedule = schedule_data;
+    }
+
+    pub async fn update_progess_leader_schedule(&self, new_leader_schedule: LeaderScheduleData) {
+        let mut data_schedule = self.0.leader_schedule.write().await;
+
+        data_schedule.current = data_schedule.next.take();
+        data_schedule.next = Some(new_leader_schedule);
+    }
+
+    pub fn get_epoch_schedule(&self) -> &EpochSchedule {
+        self.0.epoch_data.get_epoch_schedule()
+    }
+
+    pub fn get_last_slot_in_epoch(&self, epoch: u64) -> u64 {
+        self.0.epoch_data.get_last_slot_in_epoch(epoch)
+    }
+
+    pub fn get_epoch_at_slot(&self, slot: Slot) -> Epoch {
+        self.0.epoch_data.get_epoch_at_slot(slot)
+    }
+
+}
+
 pub async fn start_stakes_and_votes_loop(
-    data_cache: DataCache,
+    data_cache: DataCacheWrapper,
     mut slot_notification: SlotStream,
     mut vote_account_rpc_request: Receiver<(
         GetVoteAccountsConfig,
@@ -84,7 +137,7 @@ pub async fn start_stakes_and_votes_loop(
                 //manage confirm new slot notification to detect epoch change.
                 Ok(_) = slot_notification.recv() => {
                     //log::info!("Stake and Vote receive a slot.");
-                    let new_slot = solana_lite_rpc_core::solana_utils::get_current_confirmed_slot(&data_cache).await;
+                    let new_slot = data_cache.get_current_confirmed_slot().await;
                     let schedule_event = current_schedule_epoch.process_new_confirmed_slot(new_slot, &data_cache).await;
                     if bootstrap_done {
                         if let Some(init_event) = schedule_event {
@@ -113,7 +166,6 @@ pub async fn start_stakes_and_votes_loop(
                 Some((config, return_channel)) = vote_account_rpc_request.recv() => {
                     let commitment = config.commitment.unwrap_or(CommitmentConfig::confirmed());
                     let BlockInformation { slot, .. } = data_cache
-                        .block_information_store
                         .get_latest_block(commitment)
                         .await;
 
@@ -187,7 +239,7 @@ pub async fn start_stakes_and_votes_loop(
                                             //         .unwrap_or("no content".to_string())
                                             // );
                                             //store new account stake.
-                                            let current_slot = solana_lite_rpc_core::solana_utils::get_current_confirmed_slot(&data_cache).await;
+                                            let current_slot = data_cache.get_current_confirmed_slot().await;
 
                                             if let Some(account) = AccountPretty::new_from_geyzer(account, current_slot) {
                                                 match account.owner {
@@ -246,8 +298,9 @@ pub async fn start_stakes_and_votes_loop(
                         Ok(Some(boot_res))=> {
                             match boot_res {
                                 Ok(current_schedule_data) => {
-                                    let mut data_schedule = data_cache.leader_schedule.write().await;
-                                    *data_schedule = current_schedule_data;
+                                    data_cache.update_leader_schedule(current_schedule_data).await;
+                                    // let mut data_schedule = data_cache.leader_schedule.write().await;
+                                    // *data_schedule = current_schedule_data;
                                 }
                                 Err(err) => {
                                     log::warn!("Error during current leader schedule bootstrap from files:{err}")
@@ -275,9 +328,10 @@ pub async fn start_stakes_and_votes_loop(
                         //clone old schedule values is there's other use.
                         //only done once epoch. Avoid to use a Mutex.
                         log::info!("End leader schedule calculus  for epoch:{}", new_leader_schedule.epoch);
-                        let mut data_schedule = data_cache.leader_schedule.write().await;
-                        data_schedule.current = data_schedule.next.take();
-                        data_schedule.next = Some(new_leader_schedule.rpc_data);
+                        data_cache.update_progess_leader_schedule(new_leader_schedule.rpc_data).await;
+                        // let mut data_schedule = data_cache.leader_schedule.write().await;
+                        // data_schedule.current = data_schedule.next.take();
+                        // data_schedule.next = Some(new_leader_schedule.rpc_data);
                     }
 
                 }

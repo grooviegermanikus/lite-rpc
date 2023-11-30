@@ -44,8 +44,10 @@ use solana_sdk::signer::Signer;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::Duration;
+use log::info;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
+use solana_lite_rpc_stakevote::DataCacheWrapper;
 
 async fn get_latest_block(
     mut block_stream: BlockStream,
@@ -205,7 +207,7 @@ pub async fn start_lite_rpc(args: Config, rpc_client: Arc<RpcClient>) -> anyhow:
     //start stake vote and leader schedule.
     let (rpc_stakes_send, rpc_stakes_recv) = mpsc::channel(1000);
     let stake_vote_jh = solana_lite_rpc_stakevote::start_stakes_and_votes_loop(
-        data_cache.clone(),
+        DataCacheWrapper::new(data_cache.clone()),
         slot_notifier.resubscribe(),
         rpc_stakes_recv,
         Arc::clone(&rpc_client),

@@ -1,7 +1,7 @@
 use crate::leader_schedule::LeaderScheduleEvent;
 use serde::{Deserialize, Serialize};
-use solana_lite_rpc_core::stores::data_cache::DataCache;
 use solana_sdk::stake_history::StakeHistory;
+use crate::DataCacheWrapper;
 
 //#[derive(Debug, Default, Copy, Clone, PartialOrd, PartialEq, Eq, Ord, Serialize, Deserialize)]
 #[derive(Debug, Serialize, Deserialize)]
@@ -9,6 +9,7 @@ pub struct ScheduleEpochData {
     pub current_epoch: u64,
     pub slots_in_epoch: u64,
     pub last_slot_in_epoch: u64,
+    // why is this requires - does not seem to fit
     pub current_confirmed_slot: u64,
     pub new_rate_activation_epoch: Option<solana_sdk::clock::Epoch>,
     //to start  a new epoch and schedule, the new stake history
@@ -16,6 +17,7 @@ pub struct ScheduleEpochData {
     //these field store each event.
     //If they're defined  an new epoch and  leader schedule can append.
     new_stake_history: Option<StakeHistory>,
+    // what does (u64, u64) contain?
     next_epoch_change: Option<(u64, u64)>,
 }
 
@@ -41,7 +43,7 @@ impl ScheduleEpochData {
     pub async fn process_new_confirmed_slot(
         &mut self,
         new_slot: u64,
-        data_cache: &DataCache,
+        data_cache: &DataCacheWrapper,
     ) -> Option<LeaderScheduleEvent> {
         if self.current_confirmed_slot < new_slot {
             self.current_confirmed_slot = new_slot;
@@ -61,7 +63,7 @@ impl ScheduleEpochData {
         self.verify_epoch_change()
     }
 
-    async fn manage_change_epoch(&mut self, data_cache: &DataCache) -> Option<LeaderScheduleEvent> {
+    async fn manage_change_epoch(&mut self, data_cache: &DataCacheWrapper) -> Option<LeaderScheduleEvent> {
         //execute leaderschedule calculus at the last slot of the current epoch.
         //account change of the slot has been send at confirmed slot.
         //first epoch slot send all stake change and during this send no slot is send.
@@ -74,10 +76,8 @@ impl ScheduleEpochData {
                 self.last_slot_in_epoch
             );
             let next_epoch = data_cache
-                .epoch_data
                 .get_epoch_at_slot(self.last_slot_in_epoch + 1);
             let last_slot_in_epoch = data_cache
-                .epoch_data
                 .get_last_slot_in_epoch(next_epoch.epoch);
 
             //start leader schedule calculus

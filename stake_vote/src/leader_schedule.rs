@@ -255,6 +255,7 @@ fn calculate_epoch_stakes(
     let delegated_stakes: HashMap<Pubkey, u64> =
         stake_map
             .values()
+            // !!! there should be no side-effects in fold
             .fold(HashMap::default(), |mut delegated_stakes, stake_account| {
                 let delegation = stake_account.stake;
                 let entry = delegated_stakes.entry(delegation.voter_pubkey).or_default();

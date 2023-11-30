@@ -1,5 +1,5 @@
 use crate::vote::StoredVote;
-use crate::Slot;
+use crate::{DataCacheWrapper, Slot};
 use anyhow::bail;
 use futures_util::future::join_all;
 use futures_util::stream::FuturesUnordered;
@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
-pub async fn get_current_epoch(data_cache: &DataCache) -> LiteRpcEpoch {
+pub async fn get_current_epoch(data_cache: &DataCacheWrapper) -> LiteRpcEpoch {
     let commitment = CommitmentConfig::confirmed();
     data_cache.get_current_epoch(commitment).await
 }

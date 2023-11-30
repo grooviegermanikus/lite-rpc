@@ -12,7 +12,6 @@ use futures::future::join_all;
 use futures_util::stream::FuturesUnordered;
 use solana_client::client_error::ClientError;
 use solana_client::rpc_client::RpcClient;
-use solana_lite_rpc_core::stores::data_cache::DataCache;
 use solana_lite_rpc_core::structures::leaderschedule::CalculatedSchedule;
 use solana_lite_rpc_core::structures::leaderschedule::LeaderScheduleData;
 use solana_sdk::account::Account;
@@ -20,6 +19,7 @@ use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::pubkey::Pubkey;
 use std::time::Duration;
 use tokio::task::JoinHandle;
+use crate::DataCacheWrapper;
 
 //File where the Vote and stake use to calculate the leader schedule at epoch are stored.
 //Use to bootstrap current and next epoch leader schedule.
@@ -27,16 +27,15 @@ use tokio::task::JoinHandle;
 pub const CURRENT_EPOCH_VOTE_STAKES_FILE: &str = "current_vote_stakes.json";
 pub const NEXT_EPOCH_VOTE_STAKES_FILE: &str = "next_vote_stakes.json";
 
-pub async fn bootstrap_scheduleepoch_data(data_cache: &DataCache) -> ScheduleEpochData {
+pub async fn bootstrap_scheduleepoch_data(data_cache: &DataCacheWrapper) -> ScheduleEpochData {
     let new_rate_activation_epoch = solana_sdk::feature_set::FeatureSet::default()
-        .new_warmup_cooldown_rate_epoch(data_cache.epoch_data.get_epoch_schedule());
+        .new_warmup_cooldown_rate_epoch(data_cache.get_epoch_schedule());
 
     let bootstrap_epoch = crate::utils::get_current_epoch(data_cache).await;
     ScheduleEpochData::new(
         bootstrap_epoch.epoch,
         bootstrap_epoch.slots_in_epoch,
         data_cache
-            .epoch_data
             .get_last_slot_in_epoch(bootstrap_epoch.epoch),
         bootstrap_epoch.absolute_slot,
         new_rate_activation_epoch,
