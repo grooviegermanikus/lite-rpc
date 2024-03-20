@@ -3,6 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use dashmap::DashSet;
 use itertools::Itertools;
+use log::debug;
 use prometheus::{opts, register_int_gauge, IntGauge};
 use solana_client::{
     nonblocking::rpc_client::RpcClient,
@@ -107,6 +108,7 @@ impl AccountStorageInterface for AccountsOnDemand {
 
     #[instrument(skip_all)]
     async fn get_account(&self, account_pk: Pubkey, commitment: Commitment) -> Option<AccountData> {
+        debug!("Requesting account {} from accounts on demand", account_pk);
         match self
             .accounts_storage
             .get_account(account_pk, commitment)
@@ -117,7 +119,9 @@ impl AccountStorageInterface for AccountsOnDemand {
                 // account does not exist in account store
                 // first check if we have already subscribed to the required account
                 // This is to avoid resetting geyser subscription because of accounts that do not exists.
-                if !self.accounts_subscribed.contains(&account_pk) {
+                let already_subscribed = self.accounts_subscribed.contains(&account_pk);
+                debug!("Account {} already subscribed?: {}", account_pk, already_subscribed);
+                if !already_subscribed {
                     // get account from rpc and create its subscription
                     self.accounts_subscribed.insert(account_pk);
                     self.refresh_subscription().await;
@@ -128,29 +132,38 @@ impl AccountStorageInterface for AccountsOnDemand {
                             commitment.into_commiment_config(),
                         )
                         .await;
-                    if let Ok(response) = account_response {
-                        match response.value {
-                            Some(account) => {
-                                // update account in storage and return the account data
-                                let account_data = AccountData {
-                                    pubkey: account_pk,
-                                    account: Arc::new(account),
-                                    updated_slot: response.context.slot,
-                                };
-                                self.accounts_storage
-                                    .update_account(account_data.clone(), commitment)
-                                    .await;
-                                Some(account_data)
+                    match account_response {
+                        Ok(response) => {
+                            debug!("Got account response: {:?}", response);
+                            match response.value {
+                                Some(account) => {
+                                    // update account in storage and return the account data
+                                    let account_data = AccountData {
+                                        pubkey: account_pk,
+                                        account: Arc::new(account),
+                                        updated_slot: response.context.slot,
+                                    };
+                                    self.accounts_storage
+                                        .update_account(account_data.clone(), commitment)
+                                        .await;
+                                    Some(account_data)
+                                }
+                                // account does not exist
+                                None => {
+                                    debug!("Account {} does not exist", account_pk);
+                                    None
+                                },
                             }
-                            // account does not exist
-                            None => None,
                         }
-                    } else {
-                        // issue getting account, will then be updated by geyser
-                        None
+                        Err(rpc_err) => {
+                            // issue getting account, will then be updated by geyser
+                            debug!("Got error while getting account {}: {}", account_pk, rpc_err);
+                            None
+                        }
                     }
                 } else {
                     // we have already subscribed to the account and it does not exist
+                    debug!("Account {} does not exist but is subscribed", account_pk);
                     None
                 }
             }

@@ -27,6 +27,7 @@ use solana_transaction_status::{TransactionStatus, UiConfirmedBlock};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
+use log::info;
 
 use solana_lite_rpc_blockstore::history::History;
 use solana_lite_rpc_core::solana_utils::hash_from_str;
@@ -513,6 +514,7 @@ impl LiteRpcServer for LiteBridge {
         pubkey_str: String,
         config: Option<RpcAccountInfoConfig>,
     ) -> RpcResult<RpcResponse<Option<UiAccount>>> {
+        info!("get_account_info for {}", pubkey_str);
         let Ok(pubkey) = Pubkey::from_str(&pubkey_str) else {
             // pubkey is invalid
             return Err(jsonrpsee::types::error::ErrorCode::InvalidParams.into());
