@@ -150,6 +150,7 @@ pub async fn start_lite_rpc(args: Config, rpc_client: Arc<RpcClient>) -> anyhow:
     let tpu_connection_path = configure_tpu_connection_path(quic_proxy_addr);
 
     let account_filters = if let Some(account_filters) = account_filters {
+        info!("{}", account_filters);
         serde_json::from_str::<AccountFilters>(account_filters.as_str())
             .expect("Account filters should be valid")
     } else {
@@ -207,6 +208,8 @@ pub async fn start_lite_rpc(args: Config, rpc_client: Arc<RpcClient>) -> anyhow:
         info!("Disabled grpc stream inspection");
     }
 
+    // TODO dependency to processed_account_stream is very misleading
+    info!("processed_account_stream={}", processed_account_stream.is_some());
     let accounts_service = if let Some(account_stream) = processed_account_stream {
         // lets use inmemory storage for now
         let inmemory_account_storage: Arc<dyn AccountStorageInterface> =
@@ -239,8 +242,10 @@ pub async fn start_lite_rpc(args: Config, rpc_client: Arc<RpcClient>) -> anyhow:
                 MAX_CONNECTIONS_IN_PARALLEL,
             )
             .await?;
+        info!("Accounts service is enabled");
         Some(account_service)
     } else {
+        info!("Accounts service is NOT enabled");
         None
     };
 

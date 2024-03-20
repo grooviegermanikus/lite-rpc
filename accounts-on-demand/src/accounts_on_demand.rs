@@ -20,6 +20,7 @@ use solana_lite_rpc_core::{
 };
 use solana_sdk::{clock::Slot, pubkey::Pubkey};
 use tokio::sync::{broadcast::Sender, RwLock};
+use tracing::instrument;
 
 use crate::subscription_manager::SubscriptionManger;
 
@@ -90,18 +91,21 @@ impl AccountsOnDemand {
 
 #[async_trait]
 impl AccountStorageInterface for AccountsOnDemand {
+    #[instrument(skip_all)]
     async fn update_account(&self, account_data: AccountData, commitment: Commitment) -> bool {
         self.accounts_storage
             .update_account(account_data, commitment)
             .await
     }
 
+    #[instrument(skip_all)]
     async fn initilize_or_update_account(&self, account_data: AccountData) {
         self.accounts_storage
             .initilize_or_update_account(account_data)
             .await
     }
 
+    #[instrument(skip_all)]
     async fn get_account(&self, account_pk: Pubkey, commitment: Commitment) -> Option<AccountData> {
         match self
             .accounts_storage
@@ -153,6 +157,7 @@ impl AccountStorageInterface for AccountsOnDemand {
         }
     }
 
+    #[instrument(skip_all)]
     async fn get_program_accounts(
         &self,
         program_pubkey: Pubkey,
@@ -233,6 +238,7 @@ impl AccountStorageInterface for AccountsOnDemand {
         }
     }
 
+    #[instrument(skip_all)]
     async fn process_slot_data(&self, slot: Slot, commitment: Commitment) -> Vec<AccountData> {
         self.accounts_storage
             .process_slot_data(slot, commitment)
