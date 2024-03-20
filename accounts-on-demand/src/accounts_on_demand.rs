@@ -61,11 +61,13 @@ impl AccountsOnDemand {
         }
     }
 
+    #[instrument(skip_all)]
     pub async fn refresh_subscription(&self) {
         let mut filters = self.get_filters().await;
         NUMBER_OF_PROGRAM_FILTERS_ON_DEMAND.set(filters.len() as i64);
         NUMBER_OF_ACCOUNTS_ON_DEMAND.set(self.accounts_subscribed.len() as i64);
         // add additional filters related to accounts
+        debug!("Refreshing subscriptions with new filters: {}", self.accounts_subscribed.len());
         for accounts in &self
             .accounts_subscribed
             .iter()
@@ -124,6 +126,7 @@ impl AccountStorageInterface for AccountsOnDemand {
                 if !already_subscribed {
                     // get account from rpc and create its subscription
                     self.accounts_subscribed.insert(account_pk);
+                    // RACE starts here as account is in accounts_subscribed
                     self.refresh_subscription().await;
                     let account_response = self
                         .rpc_client
@@ -251,7 +254,7 @@ impl AccountStorageInterface for AccountsOnDemand {
         }
     }
 
-    #[instrument(skip_all)]
+    // #[instrument(skip_all)]
     async fn process_slot_data(&self, slot: Slot, commitment: Commitment) -> Vec<AccountData> {
         self.accounts_storage
             .process_slot_data(slot, commitment)

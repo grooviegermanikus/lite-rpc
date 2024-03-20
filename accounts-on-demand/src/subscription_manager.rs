@@ -6,6 +6,7 @@ use std::{
 
 use futures::StreamExt;
 use itertools::Itertools;
+use log::info;
 use merge_streams::MergeStreams;
 use prometheus::{opts, register_int_gauge, IntGauge};
 use solana_lite_rpc_accounts::account_store_interface::AccountStorageInterface;
@@ -23,12 +24,14 @@ use tokio::sync::{
     broadcast::{self, Sender},
     watch, Notify,
 };
+use tracing::{debug, warn};
 use yellowstone_grpc_proto::geyser::{
     subscribe_request_filter_accounts_filter::Filter,
     subscribe_request_filter_accounts_filter_memcmp::Data, subscribe_update::UpdateOneof,
     SubscribeRequest, SubscribeRequestFilterAccounts, SubscribeRequestFilterAccountsFilter,
     SubscribeRequestFilterAccountsFilterMemcmp,
 };
+use solana_lite_rpc_cluster_endpoints::geyser_grpc_connector::grpc_subscription_autoreconnect_tasks::create_geyser_autoconnection_task_with_mpsc;
 
 lazy_static::lazy_static! {
 static ref ON_DEMAND_SUBSCRIPTION_RESTARTED: IntGauge =
@@ -80,6 +83,7 @@ impl SubscriptionManger {
     }
 
     pub async fn update_subscriptions(&self, filters: AccountFilters) {
+        debug!("Notify accounts subscription update with {:?}", filters);
         if let Err(e) = self.account_filter_watch.send(filters) {
             log::error!(
                 "Error updating accounts on demand subscription with {}",
@@ -305,6 +309,7 @@ pub fn create_grpc_account_streaming_tasks(
         match account_filter_watch.changed().await {
             Ok(_) => {
                 // do nothing
+                warn!("Account filter watch changed before the task started");
             }
             Err(e) => {
                 log::error!("account filter watch failed with error {}", e);
@@ -332,6 +337,8 @@ pub fn create_grpc_account_streaming_tasks(
             // wait for a second to get all the accounts to update
             tokio::time::sleep(Duration::from_secs(1)).await;
             let accounts_filters = account_filter_watch.borrow_and_update().clone();
+            let started = tokio::time::Instant::now();
+            debug!("Account filter update received: {:?}", accounts_filters);
 
             let has_started = Arc::new(tokio::sync::Notify::new());
 
@@ -347,6 +354,9 @@ pub fn create_grpc_account_streaming_tasks(
                 })
                 .collect_vec();
 
+            // warn!("CHAOSMONKEY: slow subscribe");
+            // tokio::time::sleep(Duration::from_secs(5)).await;
+
             if let Err(_elapsed) =
                 tokio::time::timeout(Duration::from_secs(60), has_started.notified()).await
             {
@@ -360,6 +370,8 @@ pub fn create_grpc_account_streaming_tasks(
             current_tasks.iter().for_each(|x| x.abort());
 
             current_tasks = new_tasks;
+            // takes 2 secs or so
+            info!("Accounts on demand task subscribed with new filter in {:?}", started.elapsed());
         }
         log::error!("Accounts on demand task stopped");
         anyhow::bail!("Accounts on demand task stopped");
