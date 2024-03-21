@@ -306,6 +306,7 @@ pub fn create_grpc_account_streaming_tasks(
     let (account_sender, accounts_stream) = broadcast::channel::<AccountNotificationMessage>(128);
 
     let jh: AnyhowJoinHandle = tokio::spawn(async move {
+        debug!("Accounts on demand task starting");
         match account_filter_watch.changed().await {
             Ok(_) => {
                 // do nothing
@@ -317,9 +318,9 @@ pub fn create_grpc_account_streaming_tasks(
             }
         }
         let accounts_filters = account_filter_watch.borrow_and_update().clone();
+        debug!("First account filter received: {:?}", accounts_filters);
 
         let has_started = Arc::new(tokio::sync::Notify::new());
-
         let mut current_tasks = grpc_sources
             .iter()
             .map(|grpc_config| {
@@ -338,10 +339,9 @@ pub fn create_grpc_account_streaming_tasks(
             tokio::time::sleep(Duration::from_secs(1)).await;
             let accounts_filters = account_filter_watch.borrow_and_update().clone();
             let started = tokio::time::Instant::now();
-            debug!("Account filter update received: {:?}", accounts_filters);
+            debug!("Account filter update received from watch: {:?}", accounts_filters);
 
             let has_started = Arc::new(tokio::sync::Notify::new());
-
             let new_tasks = grpc_sources
                 .iter()
                 .map(|grpc_config| {
@@ -360,8 +360,8 @@ pub fn create_grpc_account_streaming_tasks(
             if let Err(_elapsed) =
                 tokio::time::timeout(Duration::from_secs(60), has_started.notified()).await
             {
-                // check if time elapsed during restart is greater than 60ms
-                log::error!("Tried to restart the accounts on demand task but failed");
+                // check if time elapsed during restart is greater than 60s
+                log::error!("Tried to restart the accounts on demand task but failed - keep old subscription");
                 new_tasks.iter().for_each(|x| x.abort());
                 continue;
             }

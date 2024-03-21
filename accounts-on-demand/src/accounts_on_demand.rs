@@ -10,6 +10,7 @@ use solana_client::{
     rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
     rpc_filter::RpcFilterType,
 };
+use solana_client::client_error::reqwest::get;
 use solana_lite_rpc_accounts::account_store_interface::AccountStorageInterface;
 use solana_lite_rpc_cluster_endpoints::geyser_grpc_connector::GrpcSourceConfig;
 use solana_lite_rpc_core::{
@@ -67,7 +68,9 @@ impl AccountsOnDemand {
         NUMBER_OF_PROGRAM_FILTERS_ON_DEMAND.set(filters.len() as i64);
         NUMBER_OF_ACCOUNTS_ON_DEMAND.set(self.accounts_subscribed.len() as i64);
         // add additional filters related to accounts
-        debug!("Refreshing subscriptions with new filters: {}", self.accounts_subscribed.len());
+        debug!("Refreshing subscriptions, program_filters={:?}, accounts_subscribed={}",
+            filters, self.accounts_subscribed.len());
+
         for accounts in &self
             .accounts_subscribed
             .iter()
@@ -90,6 +93,22 @@ impl AccountsOnDemand {
     async fn get_filters(&self) -> AccountFilters {
         self.program_filters.read().await.clone()
     }
+}
+#[tokio::test]
+async fn populate_list() {
+    // Arc<RwLock<AccountFilters>>
+    let program_filters = Arc::new(RwLock::new(vec![]));
+
+    let mut gettt = program_filters.read().await.clone() ;
+
+    gettt.push(AccountFilter {
+        accounts: vec!["a".to_string()],
+        program_id: Some("b".to_string()),
+        filters: None,
+    });
+
+    println!("len={:?}", program_filters.read().await.len());
+
 }
 
 #[async_trait]
@@ -137,7 +156,7 @@ impl AccountStorageInterface for AccountsOnDemand {
                         .await;
                     match account_response {
                         Ok(response) => {
-                            debug!("Got account response: {:?}", response);
+                            debug!("Got account response for {}: {:?}", account_pk, response);
                             match response.value {
                                 Some(account) => {
                                     // update account in storage and return the account data
