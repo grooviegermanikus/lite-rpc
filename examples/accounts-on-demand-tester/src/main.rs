@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::sync::atomic::AtomicU32;
 use futures::future::join_all;
+use futures::FutureExt;
 use log::info;
 use solana_rpc_client::nonblocking::rpc_client::RpcClient;
 use solana_rpc_client_api::client_error::ErrorKind;
 use solana_rpc_client_api::request::RpcError;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::pubkey::Pubkey;
+use tokio::time::sleep;
 
 #[tokio::main]
 pub async fn main() {
@@ -26,14 +27,17 @@ pub async fn main() {
 
     let rpc_client = Arc::new(RpcClient::new("http://127.0.0.1:8890/".to_string()));
 
-    for account_chunk in accounts.chunks(5) {
+    for account_chunk in accounts.chunks(20) {
         let mut account_fns = vec![];
         let mut account_pks = vec![];
         for account_pk in account_chunk {
-            for _i in 0..3 {
-                let fun = rpc_client.get_account_with_commitment(&account_pk, CommitmentConfig::processed());
-                account_fns.push(fun);
-                account_pks.push(account_pk);
+            for repeat in 0..5 {
+                for parallel in 0..3 {
+                    let fun = rpc_client.get_account_with_commitment(&account_pk, CommitmentConfig::processed());
+                    let delayed_fun = sleep(std::time::Duration::from_millis(repeat * 10)).then(|_| fun);
+                    account_fns.push(delayed_fun);
+                    account_pks.push(account_pk);
+                }
             }
         }
 
@@ -46,23 +50,23 @@ pub async fn main() {
 
         info!("accounts OK: {:?} ERR: {:?}", ok_count, err_count);
 
-        let mut errors = HashMap::<Pubkey, AtomicU32>::with_capacity(1000);
+        let mut errors = HashMap::<Pubkey, i32>::with_capacity(1000);
         for (account_pk, ref res) in zipped {
             match res {
                 Ok(rpc_repsonse) => {
-                    info!("success account: {:?}", account_pk)
+                    let errs_so_far = errors.get(account_pk).cloned()
+                        .unwrap_or(0);
+                    info!("success account: {:?} - prev {} errors", account_pk, errs_so_far);
                 }
                 Err(res_err) => {
 
                     if let ErrorKind::RpcError(RpcError::ForUser(for_user)) = &res_err.kind {
-                        info!("ForUser: {:?}", for_user);
+                        //info!("ForUser: {:?}", for_user);
                         let pubkey = parse_pubkey(for_user);
-                        info!("pubkey: {:?}", pubkey);
                         errors.entry(pubkey)
-                            .and_modify(|counter| { counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed); } )
-                            .or_insert(AtomicU32::new(0));
+                            .and_modify(|counter| { *counter *= 1; } )
+                            .or_insert(0);
                     }
-                    info!("ERROR account: {:?}", res_err);
                 }
             }
         }
