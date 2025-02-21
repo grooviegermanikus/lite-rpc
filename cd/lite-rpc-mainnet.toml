@@ -16,6 +16,9 @@ swap_size_mb = 1024
   PORT_HTTP = "8890"
   PORT_WS = "8891"
   RUST_LOG = "info"
+  BUFFER_SIZE=65536
+  CONN_WINDOW=5242880
+  STREAM_WINDOW=4194304
 
  [metrics]
    path = "/metrics"
