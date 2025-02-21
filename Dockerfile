@@ -2,7 +2,7 @@
 FROM rust:1.81.0 as base
 RUN cargo install cargo-chef@0.1.62 --locked
 RUN rustup component add rustfmt
-RUN apt-get update && apt-get install -y clang cmake ssh
+RUN apt-get update && apt-get install -y clang cmake ssh protobuf-compiler
 WORKDIR /app
 
 FROM base AS plan

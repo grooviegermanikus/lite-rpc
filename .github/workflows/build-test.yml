@@ -1,0 +1,85 @@
+name: Cargo Build, Test, and Dependency Scan
+
+on:
+  push:
+    branches:
+      - "*"
+      - "!dev"
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  scan:
+    name: Dependency Scan
+    runs-on: ubuntu-24.04
+    env:
+      TRIVY_SKIP_JAVA_DB_UPDATE: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Produce vulnerability report
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: Cargo.lock
+          ignore-unfixed: true
+          hide-progress: true
+          severity: CRITICAL
+          output: trivy.txt
+
+      - name: Publish vulnerability report to summary
+        run: |
+          if [[ -s trivy.txt ]]; then
+            {
+              echo "### Security Output"
+              echo "<details><summary>Click to expand</summary>"
+              echo ""
+              echo '```terraform'
+              cat trivy.txt
+              echo '```'
+              echo "</details>"
+            } >> $GITHUB_STEP_SUMMARY
+            cat trivy.txt
+            exit 1
+          fi
+
+  build_and_test:
+    name: LiteRPC Full Build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install Linux Packages
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install libssl-dev openssl protobuf-compiler
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust with caching using toolchain overrides
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+          # avoid the default "-D warnings" which thrashes cache
+          rustflags: ""
+
+      - name: Use compilation cache only on non-release runs
+        if: github.event_name != 'release' && github.event_name != 'workflow_dispatch'
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Set Rust caching env vars only on non-release runs
+        if: github.event_name != 'release' && github.event_name != 'workflow_dispatch'
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          echo "SCCACHE_CACHE_SIZE=1G" >> $GITHUB_ENV
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+
+      - name: Build All Targets
+        run: |
+          cargo build --locked --workspace --all-targets
+
+      - name: Test All Targets
+        run: |
+          cargo test --workspace --all-targets

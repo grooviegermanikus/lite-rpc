@@ -1,0 +1,22 @@
+app = "tantal-lite-rpc"
+primary_region = 'cdg'
+kill_signal = 'SIGTERM'
+kill_timeout = '30s'
+swap_size_mb = 1024
+
+[build]
+  dockerfile = "../Dockerfile"
+
+[[vm]]
+  memory = '4gb'
+  cpu_kind = 'performance'
+  cpus = 2
+
+[env]
+  PORT_HTTP = "8890"
+  PORT_WS = "8891"
+  RUST_LOG = "info"
+
+ [metrics]
+   path = "/metrics"
+   port = 9091
