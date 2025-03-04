@@ -1,4 +1,4 @@
-app = "tantal-lite-rpc"
+app = "mythic-lite-rpc"
 primary_region = 'cdg'
 kill_signal = 'SIGTERM'
 kill_timeout = '30s'
