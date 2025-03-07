@@ -1863,7 +1863,7 @@ dependencies = [
 [[package]]
 name = "geyser-grpc-connector"
 version = "0.11.0+yellowstone.2.0.0"
-source = "git+https://github.com/blockworks-foundation/geyser-grpc-connector.git?tag=v0.11.0+yellowstone.2.0.0+solana.2.0#78d33f3d3c55d0af6d0c02e4e0de8317f93c5c54"
+source = "git+https://github.com/blockworks-foundation/geyser-grpc-connector.git?tag=v0.12.1+yellowstone.3.0.0+solana.2.0#4136b046e8a338c80845b855e4bc49117cad38ee"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -1873,6 +1873,7 @@ dependencies = [
  "merge-streams",
  "solana-sdk",
  "tokio",
+ "tokio-metrics",
  "tonic",
  "tonic-health",
  "tracing",
@@ -6758,6 +6759,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-metrics"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb2bb07a8451c4c6fa8b3497ad198510d8b8dffa5df5cfb97a64102a58b113c8"
+dependencies = [
+ "futures-util",
+ "pin-project-lite",
+ "tokio-stream",
+]
+
+[[package]]
 name = "tokio-native-tls"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6916,6 +6928,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bytes",
+ "flate2",
  "h2 0.4.7",
  "http 1.2.0",
  "http-body 1.0.1",
@@ -6936,6 +6949,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
+ "zstd 0.13.2",
 ]
 
 [[package]]
@@ -7759,8 +7773,8 @@ dependencies = [
 
 [[package]]
 name = "yellowstone-grpc-client"
-version = "2.0.0+solana.2.0.16"
-source = "git+https://github.com/rpcpool/yellowstone-grpc.git?tag=v2.0.0+solana.2.0.16#a330b503a7d2ae5353fc91ce7d23a0a1e655cb96"
+version = "3.0.0+solana.2.0.16"
+source = "git+https://github.com/rpcpool/yellowstone-grpc.git?tag=v3.0.0+solana.2.0.16#1c98b821d4378a8635b2748e7a0c16d4a32c5590"
 dependencies = [
  "bytes",
  "futures",
@@ -7772,8 +7786,8 @@ dependencies = [
 
 [[package]]
 name = "yellowstone-grpc-proto"
-version = "2.0.0+solana.2.0.16"
-source = "git+https://github.com/rpcpool/yellowstone-grpc.git?tag=v2.0.0+solana.2.0.16#a330b503a7d2ae5353fc91ce7d23a0a1e655cb96"
+version = "3.0.0+solana.2.0.16"
+source = "git+https://github.com/rpcpool/yellowstone-grpc.git?tag=v3.0.0+solana.2.0.16#1c98b821d4378a8635b2748e7a0c16d4a32c5590"
 dependencies = [
  "anyhow",
  "bincode",
