@@ -28,6 +28,7 @@ use yellowstone_grpc_proto::geyser::{
     SubscribeRequest, SubscribeRequestFilterAccounts, SubscribeRequestFilterAccountsFilter,
     SubscribeRequestFilterAccountsFilterMemcmp,
 };
+use yellowstone_grpc_proto::tonic::codec::CompressionEncoding;
 use yellowstone_grpc_proto::tonic::service::Interceptor;
 
 pub fn start_account_streaming_tasks(
@@ -97,6 +98,7 @@ pub fn start_account_streaming_tasks(
                             account: vec![],
                             owner: vec![program_id.clone()],
                             filters,
+                            ..Default::default()
                         },
                     );
                 }
@@ -129,6 +131,7 @@ pub fn start_account_streaming_tasks(
                             .collect_vec(),
                         owner: vec![],
                         filters: vec![],
+                        ..Default::default()
                     },
                 );
                 let mut client = create_connection(&grpc_config).await?;
@@ -219,6 +222,7 @@ async fn create_connection(
             conn_window: Some(5242880),
             stream_window: Some(4194304),
         },
+        Some(CompressionEncoding::Zstd)
     )
     .await
     .map_err(|e| anyhow!("Failed to connect to grpc source: {e:?}"))
