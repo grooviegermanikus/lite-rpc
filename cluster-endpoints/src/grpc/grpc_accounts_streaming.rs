@@ -222,7 +222,7 @@ async fn create_connection(
             conn_window: Some(5242880),
             stream_window: Some(4194304),
         },
-        Some(CompressionEncoding::Zstd)
+        Some(CompressionEncoding::Zstd),
     )
     .await
     .map_err(|e| anyhow!("Failed to connect to grpc source: {e:?}"))

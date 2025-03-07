@@ -153,7 +153,14 @@ pub async fn start_lite_rpc(args: Config, rpc_client: Arc<RpcClient>) -> anyhow:
 
     let gprc_sources = grpc_sources
         .iter()
-        .map(|s| GrpcSourceConfig::new(s.addr.clone(), s.x_token.clone(), None, timeouts.clone()))
+        .map(|s| {
+            GrpcSourceConfig::new_compressed(
+                s.addr.clone(),
+                s.x_token.clone(),
+                None,
+                timeouts.clone(),
+            )
+        })
         .collect_vec();
 
     let (subscriptions, cluster_endpoint_tasks) = if use_grpc {
@@ -163,7 +170,12 @@ pub async fn start_lite_rpc(args: Config, rpc_client: Arc<RpcClient>) -> anyhow:
             grpc_sources
                 .iter()
                 .map(|s| {
-                    GrpcSourceConfig::new(s.addr.clone(), s.x_token.clone(), None, timeouts.clone())
+                    GrpcSourceConfig::new_compressed(
+                        s.addr.clone(),
+                        s.x_token.clone(),
+                        None,
+                        timeouts.clone(),
+                    )
                 })
                 .collect(),
             account_filters.clone(),
