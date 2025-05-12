@@ -1,4 +1,3 @@
-use crate::benches::tx_status_websocket_collector::start_tx_status_collector;
 use anyhow::{bail, Context, Error};
 
 use futures::future::join_all;
@@ -6,7 +5,6 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use log::{debug, info, trace, warn};
 
-use solana_lite_rpc_util::obfuscate_rpcurl;
 use solana_rpc_client::nonblocking::rpc_client::RpcClient;
 use solana_rpc_client::rpc_client::SerializableTransaction;
 use solana_rpc_client_api::client_error::ErrorKind;
@@ -14,7 +12,6 @@ use solana_rpc_client_api::config::RpcSendTransactionConfig;
 
 use solana_sdk::clock::Slot;
 use solana_sdk::commitment_config::CommitmentConfig;
-use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
 use solana_sdk::transaction::VersionedTransaction;
 use solana_transaction_status::TransactionConfirmationStatus;
@@ -33,8 +30,7 @@ pub fn create_rpc_client(rpc_url: &Url) -> RpcClient {
 pub enum ConfirmationResponseFromRpc {
     // RPC error on send_transaction
     SendError(Arc<ErrorKind>),
-    // (sent slot at confirmed commitment, confirmed slot, ..., ...)
-    // transaction_confirmation_status is "confirmed" (finalized is not reported by blockSubscribe websocket
+    // (sent slot confirmed slot, ..., ...)
     Success(Slot, Slot, TransactionConfirmationStatus, Duration),
     // timout waiting for confirmation status
     Timeout(Duration),
@@ -42,12 +38,9 @@ pub enum ConfirmationResponseFromRpc {
 
 pub async fn send_and_confirm_bulk_transactions(
     rpc_client: &RpcClient,
-    tx_status_websocket_addr: Url,
-    payer_pubkey: Pubkey,
     txs: &[VersionedTransaction],
     max_timeout: Duration,
 ) -> anyhow::Result<Vec<(Signature, ConfirmationResponseFromRpc)>> {
-
     let send_config = RpcSendTransactionConfig {
         skip_preflight: true,
         preflight_commitment: None,
@@ -56,18 +49,7 @@ pub async fn send_and_confirm_bulk_transactions(
         min_context_slot: None,
     };
 
-    let status_collector_started_at = Instant::now();
-    // note: we get confirmed but never finaliized
-    // start takes some time (2sec)
-    let (tx_status_map, _jh_collector) = start_tx_status_collector(
-        tx_status_websocket_addr.clone(),
-        payer_pubkey,
-        CommitmentConfig::confirmed(),
-    )
-    .await;
-    info!("status collector started in {:?}", status_collector_started_at.elapsed());
-
-    trace!("Polling for next slot ..");
+    trace!("Polling for next slot(confirmed) ..");
     let send_slot = poll_next_slot_start(rpc_client)
         .await
         .context("poll for next start slot")?;
@@ -97,8 +79,8 @@ pub async fn send_and_confirm_bulk_transactions(
         );
     } else {
         debug!(
-            "Slot did not advance during sending transactions: {} -> {}",
-            send_slot, after_send_slot
+            "Sucessfully sent transactions in same slot: {}",
+            send_slot
         );
     }
 
@@ -149,76 +131,70 @@ pub async fn send_and_confirm_bulk_transactions(
         });
     let mut result_status_map: HashMap<Signature, ConfirmationResponseFromRpc> = HashMap::new();
 
-    // items get moved from pending_status_set to result_status_map
-
-    debug!(
-        "Waiting for transaction confirmations from websocket source <{}> ..",
-        obfuscate_rpcurl(tx_status_websocket_addr.as_str())
-    );
-    let started_at = Instant::now();
+    info!("Waiting {:?} before checking status ...", max_timeout);
     let timeout_at = started_at + max_timeout;
-    // "poll" the status dashmap
-    'polling_loop: for iteration in 1.. {
-        let iteration_ends_at = started_at + Duration::from_millis(iteration * 100);
+    while Instant::now() < timeout_at {
+        info!("..");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+
+    let started_at = Instant::now();
+    {
         assert_eq!(
             pending_status_set.len() + result_status_map.len(),
             num_sent_ok,
             "Items must move between pending+result"
         );
-        let elapsed = started_at.elapsed();
 
-        for multi in tx_status_map.iter() {
+        let sigs = txs
+            .iter()
+            .map(|tx| tx.get_signature())
+            .cloned()
+            .collect_vec();
+
+        let tx_statuses = rpc_client.get_signature_statuses(&sigs).await?.value;
+        assert_eq!(tx_statuses.len(), sigs.len());
+
+        for (tx_sig, tx_status) in sigs.iter().zip(tx_statuses) {
             // note that we will see tx_sigs we did not send
-            let (tx_sig, confirmed_slot) = multi.pair();
 
-            // status is confirmed
+            trace!("sig {:?} status: {:?}", tx_sig, tx_status);
+            let Some(tx_status) = tx_status else {
+                // no status -> tx will remain in pending list and later marked as timedout
+                continue;
+            };
+
+            let landed_slot = tx_status.slot;
+
             if pending_status_set.remove(tx_sig) {
                 trace!(
-                    "take status for sig {:?} and confirmed_slot: {:?} from websocket source",
+                    "take status for sig {:?} and landed_slot: {:?}",
                     tx_sig,
-                    confirmed_slot
+                    landed_slot
                 );
                 let prev_value = result_status_map.insert(
                     *tx_sig,
                     ConfirmationResponseFromRpc::Success(
                         send_slot,
-                        *confirmed_slot,
+                        landed_slot,
                         // note: this is not optimal as we do not cover finalized here
                         TransactionConfirmationStatus::Confirmed,
-                        elapsed,
+                        Duration::from_secs(9999),
                     ),
                 );
                 assert!(prev_value.is_none(), "Must not override existing value");
             }
-        } // -- END for tx_status_map loop
+        } // -- END for tx status loop
+    }
 
-        if pending_status_set.is_empty() {
-            debug!(
-                "All transactions confirmed after {:?}",
-                started_at.elapsed()
-            );
-            break 'polling_loop;
-        }
-
-        if Instant::now() > timeout_at {
-            warn!(
-                "Timeout waiting for transactions to confirm after {:?}",
-                started_at.elapsed()
-            );
-            break 'polling_loop;
-        }
-
-        tokio::time::sleep_until(iteration_ends_at).await;
-    } // -- END polling loop
-
-    let total_time_elapsed_polling = started_at.elapsed();
+    let total_time_elapsed_checking = started_at.elapsed();
 
     // all transactions which remain in pending list are considered timed out
     for tx_sig in pending_status_set.clone() {
         pending_status_set.remove(&tx_sig);
         result_status_map.insert(
             tx_sig,
-            ConfirmationResponseFromRpc::Timeout(total_time_elapsed_polling),
+            ConfirmationResponseFromRpc::Timeout(total_time_elapsed_checking),
         );
     }
 

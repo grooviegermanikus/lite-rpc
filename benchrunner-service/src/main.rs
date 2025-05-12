@@ -248,7 +248,6 @@ impl BenchRunner for BenchRunnerConfirmationRateImpl {
         let metric = bench::service_adapter_new::benchnew_confirmation_rate_servicerunner(
             &self.bench_config,
             self.tenant_config.rpc_addr.clone(),
-            self.tenant_config.tx_status_ws_addr.clone(),
             self.funded_payer.insecure_clone(),
         )
         .await;
