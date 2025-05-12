@@ -45,7 +45,7 @@ pub async fn confirmation_rate(
 
     let ws_addr = tx_status_websocket_addr
         .unwrap_or_else(|| rpc_url.replace("http:", "ws:").replace("https:", "wss:"));
-    info!("WS ADDR: {}", obfuscate_rpcurl(&ws_addr));
+    info!("STATUS-WS ADDR: {}", obfuscate_rpcurl(&ws_addr));
 
     let payer: Arc<Keypair> = Arc::new(read_keypair_file(payer_path).unwrap());
     info!("Payer: {}", payer.pubkey().to_string());

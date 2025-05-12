@@ -4,7 +4,7 @@ use anyhow::{bail, Context, Error};
 use futures::future::join_all;
 use futures::TryFutureExt;
 use itertools::Itertools;
-use log::{debug, trace, warn};
+use log::{debug, info, trace, warn};
 
 use solana_lite_rpc_util::obfuscate_rpcurl;
 use solana_rpc_client::nonblocking::rpc_client::RpcClient;
@@ -47,11 +47,6 @@ pub async fn send_and_confirm_bulk_transactions(
     txs: &[VersionedTransaction],
     max_timeout: Duration,
 ) -> anyhow::Result<Vec<(Signature, ConfirmationResponseFromRpc)>> {
-    trace!("Polling for next slot ..");
-    let send_slot = poll_next_slot_start(rpc_client)
-        .await
-        .context("poll for next start slot")?;
-    trace!("Send slot: {}", send_slot);
 
     let send_config = RpcSendTransactionConfig {
         skip_preflight: true,
@@ -61,13 +56,22 @@ pub async fn send_and_confirm_bulk_transactions(
         min_context_slot: None,
     };
 
+    let status_collector_started_at = Instant::now();
     // note: we get confirmed but never finaliized
+    // start takes some time (2sec)
     let (tx_status_map, _jh_collector) = start_tx_status_collector(
         tx_status_websocket_addr.clone(),
         payer_pubkey,
         CommitmentConfig::confirmed(),
     )
     .await;
+    info!("status collector started in {:?}", status_collector_started_at.elapsed());
+
+    trace!("Polling for next slot ..");
+    let send_slot = poll_next_slot_start(rpc_client)
+        .await
+        .context("poll for next start slot")?;
+    trace!("Send slot: {}", send_slot);
 
     let started_at = Instant::now();
     trace!(
