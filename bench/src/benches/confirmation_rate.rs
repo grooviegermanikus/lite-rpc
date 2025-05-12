@@ -69,7 +69,7 @@ pub async fn confirmation_rate(
             }
             Err(err) => {
                 warn!(
-                    "Failed to send bulk txs and wait - no rpc stats available: {}",
+                    "Failed to send bulk txs and wait - no rpc stats available: {:#?}",
                     err
                 );
             }
