@@ -37,7 +37,8 @@ pub enum ConfirmationResponseFromRpc {
 }
 
 pub async fn send_and_confirm_bulk_transactions(
-    rpc_client: &RpcClient,
+    send_rpc: &RpcClient,
+    supportive_rpc: &RpcClient,
     txs: &[VersionedTransaction],
     max_timeout: Duration,
 ) -> anyhow::Result<Vec<(Signature, ConfirmationResponseFromRpc)>> {
@@ -50,7 +51,7 @@ pub async fn send_and_confirm_bulk_transactions(
     };
 
     trace!("Polling for next slot(confirmed) ..");
-    let send_slot = poll_next_slot_start(rpc_client)
+    let send_slot = poll_next_slot_start(supportive_rpc)
         .await
         .context("poll for next start slot")?;
     trace!("Send slot: {}", send_slot);
@@ -61,13 +62,13 @@ pub async fn send_and_confirm_bulk_transactions(
         txs.len()
     );
     let batch_sigs_or_fails = join_all(txs.iter().map(|tx| {
-        rpc_client
+        send_rpc
             .send_transaction_with_config(tx, send_config)
             .map_err(|e| e.kind)
     }))
     .await;
 
-    let after_send_slot = rpc_client
+    let after_send_slot = supportive_rpc
         .get_slot_with_commitment(CommitmentConfig::confirmed())
         .await
         .context("get slot afterwards")?;
@@ -151,7 +152,7 @@ pub async fn send_and_confirm_bulk_transactions(
             .cloned()
             .collect_vec();
 
-        let tx_statuses = rpc_client.get_signature_statuses(&sigs).await?.value;
+        let tx_statuses = supportive_rpc.get_signature_statuses(&sigs).await?.value;
         assert_eq!(tx_statuses.len(), sigs.len());
 
         for (tx_sig, tx_status) in sigs.iter().zip(tx_statuses) {

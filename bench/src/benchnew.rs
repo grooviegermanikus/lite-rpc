@@ -114,7 +114,8 @@ async fn main() {
             cu_price,
         } => confirmation_rate(
             &payer_path,
-            rpc_url,
+            rpc_url.clone(),
+            rpc_url, // TODO split
             BenchmarkTransactionParams {
                 tx_size: size_tx,
                 cu_price_micro_lamports: cu_price,
@@ -137,7 +138,8 @@ async fn main() {
         } => confirmation_slot(
             &payer_path,
             rpc_a,
-            rpc_b,
+            rpc_b.clone(),
+            rpc_b, // TODO split
             BenchmarkTransactionParams {
                 tx_size: size_tx,
                 cu_price_micro_lamports: cu_price,

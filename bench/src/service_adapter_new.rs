@@ -22,6 +22,8 @@ pub async fn benchnew_confirmation_rate_servicerunner(
 
     let result = send_bulk_txs_and_wait(
         &rpc,
+        // note: should split rpc and provide two
+        &rpc,
         &funded_payer,
         bench_config.tx_count,
         &tx_params,

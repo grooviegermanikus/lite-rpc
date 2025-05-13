@@ -44,8 +44,9 @@ pub struct ConfirmationSlotSuccess {
 /// Delay time is calculated as half of the difference in duration of [getHealth](https://solana.com/docs/rpc/http/gethealth) calls to both RPCs.
 pub async fn confirmation_slot(
     payer_path: &Path,
-    rpc_a_url: String,
-    rpc_b_url: String,
+    send_rpc_a_url: String,
+    send_rpc_b_url: String,
+    supportive_rpc: String,
     tx_params: BenchmarkTransactionParams,
     max_timeout: Duration,
     num_of_runs: usize,
@@ -56,13 +57,15 @@ pub async fn confirmation_slot(
         tx_params.cu_price_micro_lamports
     );
     warn!("THIS IS WORK IN PROGRESS");
-    info!("RPC A: {}", obfuscate_rpcurl(&rpc_a_url));
-    info!("RPC B: {}", obfuscate_rpcurl(&rpc_b_url));
+    info!("RPC A: {}", obfuscate_rpcurl(&send_rpc_a_url));
+    info!("RPC B: {}", obfuscate_rpcurl(&send_rpc_b_url));
 
     let rpc_a_url =
-        Url::parse(&rpc_a_url).map_err(|e| anyhow!("Failed to parse RPC A URL: {}", e))?;
+        Url::parse(&send_rpc_a_url).map_err(|e| anyhow!("Failed to parse RPC A URL: {}", e))?;
     let rpc_b_url =
-        Url::parse(&rpc_b_url).map_err(|e| anyhow!("Failed to parse RPC B URL: {}", e))?;
+        Url::parse(&send_rpc_b_url).map_err(|e| anyhow!("Failed to parse RPC B URL: {}", e))?;
+    let supportive_rpc =
+        Url::parse(&supportive_rpc).map_err(|e| anyhow!("Failed to parse supportive RPC URL: {}", e))?;
 
     let mut rng = create_rng(None);
     let payer = read_keypair_file(payer_path).expect("payer file");
@@ -76,6 +79,8 @@ pub async fn confirmation_slot(
     for _ in 0..num_of_runs {
         let rpc_a = create_rpc_client(&rpc_a_url);
         let rpc_b = create_rpc_client(&rpc_b_url);
+        let supportive_rpc_a = create_rpc_client(&supportive_rpc);
+        let supportive_rpc_b = create_rpc_client(&supportive_rpc);
 
         // measure network time to reach the respective RPC endpoints,
         // used to mitigate the difference in distance by delaying the txn sending
@@ -100,13 +105,13 @@ pub async fn confirmation_slot(
         let a_task = tokio::spawn(async move {
             sleep(Duration::from_secs_f64(a_delay)).await;
             debug!("(A) sending tx {}", rpc_a_tx.signatures[0]);
-            send_and_confirm_transaction(&rpc_a, rpc_a_tx, max_timeout).await
+            send_and_confirm_transaction(&rpc_a, &supportive_rpc_a, rpc_a_tx, max_timeout).await
         });
 
         let b_task = tokio::spawn(async move {
             sleep(Duration::from_secs_f64(b_delay)).await;
             debug!("(B) sending tx {}", rpc_b_tx.signatures[0]);
-            send_and_confirm_transaction(&rpc_b, rpc_b_tx, max_timeout).await
+            send_and_confirm_transaction(&rpc_b, &supportive_rpc_b,rpc_b_tx, max_timeout).await
         });
 
         let (a, b) = tokio::join!(a_task, b_task);
@@ -160,13 +165,15 @@ async fn create_tx(
 }
 
 async fn send_and_confirm_transaction(
-    rpc: &RpcClient,
+    send_rpc: &RpcClient,
+    supportive_rpc: &RpcClient,
     tx: VersionedTransaction,
     max_timeout: Duration,
 ) -> anyhow::Result<ConfirmationResponseFromRpc> {
     let result_vec: Vec<(Signature, ConfirmationResponseFromRpc)> =
         send_and_confirm_bulk_transactions(
-            rpc,
+            send_rpc,
+            supportive_rpc,
             // tx_status_websocket_addr,
             // payer_pubkey,
             &[tx],
