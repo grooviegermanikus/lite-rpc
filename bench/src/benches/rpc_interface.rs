@@ -138,7 +138,6 @@ pub async fn send_and_confirm_bulk_transactions(
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
 
-    let started_at = Instant::now();
     {
         assert_eq!(
             pending_status_set.len() + result_status_map.len(),
