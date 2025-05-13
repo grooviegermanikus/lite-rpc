@@ -507,7 +507,7 @@ pub fn create_grpc_multiplex_processed_slots_subscription(
                         let mapfilter = map_slot_from_yellowstone_update(*slot_update);
                         if let Some(slot) = mapfilter {
                             if last_slot > slot {
-                                continue;
+                                continue 'recv_loop;
                             }
                             last_slot = slot;
 
