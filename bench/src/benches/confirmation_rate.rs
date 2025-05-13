@@ -28,8 +28,8 @@ pub struct Metric {
 /// TC2 send multiple runs of num_txs, measure the confirmation rate
 pub async fn confirmation_rate(
     payer_path: &Path,
-    send_rpc_url: String,
-    supportive_rpc_url: String,
+    send_rpc_url: &str,
+    supportive_rpc_url: &str,
     tx_params: BenchmarkTransactionParams,
     max_timeout: Duration,
     txs_per_run: usize,
@@ -39,11 +39,14 @@ pub async fn confirmation_rate(
 
     assert!(num_of_runs > 0, "num_of_runs must be greater than 0");
 
-    let send_rpc = Arc::new(RpcClient::new(send_rpc_url.clone()));
+    let send_rpc = Arc::new(RpcClient::new(send_rpc_url.to_string()));
     info!("RPC: {}", obfuscate_rpcurl(&send_rpc.as_ref().url()));
-    
-    let supportive_rpc = Arc::new(RpcClient::new(supportive_rpc_url.clone()));
-    info!("Supportive RPC: {}", obfuscate_rpcurl(&supportive_rpc.as_ref().url()));
+
+    let supportive_rpc = Arc::new(RpcClient::new(supportive_rpc_url.to_string()));
+    info!(
+        "Supportive RPC: {}",
+        obfuscate_rpcurl(&supportive_rpc.as_ref().url())
+    );
 
     let payer: Arc<Keypair> = Arc::new(read_keypair_file(payer_path).unwrap());
     info!("Payer: {}", payer.pubkey().to_string());
@@ -51,9 +54,16 @@ pub async fn confirmation_rate(
     let mut rpc_results = Vec::with_capacity(num_of_runs);
 
     for _ in 0..num_of_runs {
-        match send_bulk_txs_and_wait(&send_rpc, &supportive_rpc, &payer, txs_per_run, &tx_params, max_timeout)
-            .await
-            .context("send bulk tx and wait")
+        match send_bulk_txs_and_wait(
+            &send_rpc,
+            &supportive_rpc,
+            &payer,
+            txs_per_run,
+            &tx_params,
+            max_timeout,
+        )
+        .await
+        .context("send bulk tx and wait")
         {
             Ok(stat) => {
                 info!(
@@ -102,14 +112,9 @@ pub async fn send_bulk_txs_and_wait(
 
     trace!("Sending {} transactions in bulk ..", txs.len());
     let tx_and_confirmations_from_rpc: Vec<(Signature, ConfirmationResponseFromRpc)> =
-        send_and_confirm_bulk_transactions(
-            send_rpc,
-            supportive_rpc,
-            &txs,
-            max_timeout,
-        )
-        .await
-        .context("send and confirm bulk tx")?;
+        send_and_confirm_bulk_transactions(send_rpc, supportive_rpc, &txs, max_timeout)
+            .await
+            .context("send and confirm bulk tx")?;
     trace!("Done sending {} transaction.", txs.len());
 
     let mut tx_sent = 0;

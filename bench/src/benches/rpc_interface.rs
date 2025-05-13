@@ -79,10 +79,7 @@ pub async fn send_and_confirm_bulk_transactions(
             send_slot, after_send_slot
         );
     } else {
-        debug!(
-            "Sucessfully sent transactions in same slot: {}",
-            send_slot
-        );
+        debug!("Sucessfully sent transactions in same slot: {}", send_slot);
     }
 
     let num_sent_ok = batch_sigs_or_fails

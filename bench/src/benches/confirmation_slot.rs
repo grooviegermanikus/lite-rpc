@@ -44,9 +44,9 @@ pub struct ConfirmationSlotSuccess {
 /// Delay time is calculated as half of the difference in duration of [getHealth](https://solana.com/docs/rpc/http/gethealth) calls to both RPCs.
 pub async fn confirmation_slot(
     payer_path: &Path,
-    send_rpc_a_url: String,
-    send_rpc_b_url: String,
-    supportive_rpc: String,
+    send_rpc_a_url: &str,
+    send_rpc_b_url: &str,
+    supportive_rpc: &str,
     tx_params: BenchmarkTransactionParams,
     max_timeout: Duration,
     num_of_runs: usize,
@@ -57,15 +57,15 @@ pub async fn confirmation_slot(
         tx_params.cu_price_micro_lamports
     );
     warn!("THIS IS WORK IN PROGRESS");
-    info!("RPC A: {}", obfuscate_rpcurl(&send_rpc_a_url));
-    info!("RPC B: {}", obfuscate_rpcurl(&send_rpc_b_url));
+    info!("RPC A: {}", obfuscate_rpcurl(send_rpc_a_url));
+    info!("RPC B: {}", obfuscate_rpcurl(send_rpc_b_url));
 
     let rpc_a_url =
-        Url::parse(&send_rpc_a_url).map_err(|e| anyhow!("Failed to parse RPC A URL: {}", e))?;
+        Url::parse(send_rpc_a_url).map_err(|e| anyhow!("Failed to parse RPC A URL: {}", e))?;
     let rpc_b_url =
-        Url::parse(&send_rpc_b_url).map_err(|e| anyhow!("Failed to parse RPC B URL: {}", e))?;
-    let supportive_rpc =
-        Url::parse(&supportive_rpc).map_err(|e| anyhow!("Failed to parse supportive RPC URL: {}", e))?;
+        Url::parse(send_rpc_b_url).map_err(|e| anyhow!("Failed to parse RPC B URL: {}", e))?;
+    let supportive_rpc = Url::parse(supportive_rpc)
+        .map_err(|e| anyhow!("Failed to parse supportive RPC URL: {}", e))?;
 
     let mut rng = create_rng(None);
     let payer = read_keypair_file(payer_path).expect("payer file");
@@ -111,7 +111,7 @@ pub async fn confirmation_slot(
         let b_task = tokio::spawn(async move {
             sleep(Duration::from_secs_f64(b_delay)).await;
             debug!("(B) sending tx {}", rpc_b_tx.signatures[0]);
-            send_and_confirm_transaction(&rpc_b, &supportive_rpc_b,rpc_b_tx, max_timeout).await
+            send_and_confirm_transaction(&rpc_b, &supportive_rpc_b, rpc_b_tx, max_timeout).await
         });
 
         let (a, b) = tokio::join!(a_task, b_task);

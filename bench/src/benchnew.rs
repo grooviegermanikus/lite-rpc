@@ -38,6 +38,9 @@ enum SubCommand {
         payer_path: PathBuf,
         #[clap(short, long)]
         rpc_url: String,
+        /// optional URL of the supportive RPC which provides recent blockhash, slot and tx status
+        #[clap(long)]
+        rpc_supportive: Option<String>,
         #[clap(short, long)]
         size_tx: TxSize,
         /// Maximum confirmation time in milliseconds. After this, the txn is considered unconfirmed
@@ -64,6 +67,9 @@ enum SubCommand {
         #[clap(short, long)]
         #[arg(short = 'b')]
         rpc_b: String,
+        /// optional URL of the supportive RPC which provides recent blockhash, slot and tx status
+        #[clap(long)]
+        rpc_supportive: Option<String>,
         #[clap(short, long)]
         size_tx: TxSize,
         /// Maximum confirmation time in milliseconds. After this, the txn is considered unconfirmed
@@ -107,6 +113,7 @@ async fn main() {
         SubCommand::ConfirmationRate {
             payer_path,
             rpc_url,
+            rpc_supportive,
             size_tx,
             max_timeout_ms,
             txs_per_run,
@@ -114,8 +121,8 @@ async fn main() {
             cu_price,
         } => confirmation_rate(
             &payer_path,
-            rpc_url.clone(),
-            rpc_url, // TODO split
+            &rpc_url,
+            rpc_supportive.as_ref().unwrap_or(&rpc_url),
             BenchmarkTransactionParams {
                 tx_size: size_tx,
                 cu_price_micro_lamports: cu_price,
@@ -130,6 +137,7 @@ async fn main() {
             payer_path,
             rpc_a,
             rpc_b,
+            rpc_supportive,
             size_tx,
             max_timeout_ms,
             num_of_runs,
@@ -137,9 +145,9 @@ async fn main() {
             ping_thing_token,
         } => confirmation_slot(
             &payer_path,
-            rpc_a,
-            rpc_b.clone(),
-            rpc_b, // TODO split
+            &rpc_a,
+            &rpc_b,
+            rpc_supportive.as_ref().unwrap_or(&rpc_b),
             BenchmarkTransactionParams {
                 tx_size: size_tx,
                 cu_price_micro_lamports: cu_price,
