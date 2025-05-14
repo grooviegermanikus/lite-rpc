@@ -3160,7 +3160,7 @@ dependencies = [
  "native-tls",
  "postgres-native-tls",
  "prometheus",
- "quinn 0.10.2",
+ "quinn",
  "serde",
  "serde_json",
  "solana-account-decoder",
@@ -4071,23 +4071,6 @@ dependencies = [
 
 [[package]]
 name = "quinn"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cc2c5017e4b43d5995dcea317bc46c1e09404c0a9664d2908f7f02dfe943d75"
-dependencies = [
- "bytes",
- "pin-project-lite",
- "quinn-proto 0.10.6",
- "quinn-udp 0.4.1",
- "rustc-hash 1.1.0",
- "rustls 0.21.12",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "quinn"
 version = "0.11.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "626214629cda6781b6dc1d316ba307189c85ba657213ce642d9c77670f8202c8"
@@ -4095,8 +4078,8 @@ dependencies = [
  "bytes",
  "cfg_aliases",
  "pin-project-lite",
- "quinn-proto 0.11.12",
- "quinn-udp 0.5.12",
+ "quinn-proto",
+ "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls 0.23.27",
  "socket2",
@@ -4104,24 +4087,6 @@ dependencies = [
  "tokio",
  "tracing",
  "web-time",
-]
-
-[[package]]
-name = "quinn-proto"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "141bf7dfde2fbc246bfd3fe12f2455aa24b0fbd9af535d8c86c7bd1381ff2b1a"
-dependencies = [
- "bytes",
- "rand 0.8.5",
- "ring 0.16.20",
- "rustc-hash 1.1.0",
- "rustls 0.21.12",
- "rustls-native-certs 0.6.3",
- "slab",
- "thiserror 1.0.69",
- "tinyvec",
- "tracing",
 ]
 
 [[package]]
@@ -4145,19 +4110,6 @@ dependencies = [
  "tinyvec",
  "tracing",
  "web-time",
-]
-
-[[package]]
-name = "quinn-udp"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "055b4e778e8feb9f93c4e439f71dc2156ef13360b432b799e179a8c4cdf0b1d7"
-dependencies = [
- "bytes",
- "libc",
- "socket2",
- "tracing",
- "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -5347,7 +5299,7 @@ dependencies = [
  "indexmap 2.9.0",
  "indicatif",
  "log",
- "quinn 0.11.8",
+ "quinn",
  "rayon",
  "solana-account",
  "solana-client-traits",
@@ -5933,10 +5885,10 @@ dependencies = [
  "lazy_static",
  "log",
  "prometheus",
- "quinn 0.10.2",
+ "quinn",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rustls 0.21.12",
+ "rustls 0.23.27",
  "serde",
  "serde_json",
  "solana-account-decoder",
@@ -5975,10 +5927,10 @@ dependencies = [
  "log",
  "merge-streams",
  "prometheus",
- "quinn 0.10.2",
+ "quinn",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rustls 0.21.12",
+ "rustls 0.23.27",
  "serde",
  "serde_json",
  "solana-account-decoder",
@@ -6017,8 +5969,8 @@ dependencies = [
  "lazy_static",
  "log",
  "prometheus",
- "quinn 0.10.2",
- "rustls 0.21.12",
+ "quinn",
+ "rustls 0.23.27",
  "serde",
  "serde_json",
  "solana-account-decoder",
@@ -6124,8 +6076,8 @@ dependencies = [
  "log",
  "merge-streams",
  "prometheus",
- "quinn 0.10.2",
- "rustls 0.21.12",
+ "quinn",
+ "rustls 0.23.27",
  "serde",
  "serde_json",
  "solana-client",
@@ -6162,9 +6114,9 @@ dependencies = [
  "itertools 0.10.5",
  "log",
  "prometheus",
- "quinn 0.10.2",
+ "quinn",
  "rand 0.8.5",
- "rustls 0.21.12",
+ "rustls 0.23.27",
  "serde",
  "serde_json",
  "solana-account-decoder",
@@ -6220,7 +6172,7 @@ dependencies = [
  "log",
  "native-tls",
  "prometheus",
- "quinn 0.11.8",
+ "quinn",
  "rcgen",
  "rustls 0.23.27",
  "serde",
@@ -6258,9 +6210,9 @@ dependencies = [
  "log",
  "native-tls",
  "prometheus",
- "quinn 0.10.2",
+ "quinn",
  "rcgen",
- "rustls 0.21.12",
+ "rustls 0.23.27",
  "serde",
  "serde_json",
  "solana-lite-rpc-core",
@@ -6297,8 +6249,8 @@ dependencies = [
  "lazy_static",
  "log",
  "prometheus",
- "quinn 0.10.2",
- "rustls 0.21.12",
+ "quinn",
+ "rustls 0.23.27",
  "serde",
  "serde_json",
  "solana-client",
@@ -6337,8 +6289,8 @@ dependencies = [
  "log",
  "merge-streams",
  "prometheus",
- "quinn 0.10.2",
- "rustls 0.21.12",
+ "quinn",
+ "rustls 0.23.27",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -6933,8 +6885,8 @@ dependencies = [
  "itertools 0.12.1",
  "lazy_static",
  "log",
- "quinn 0.11.8",
- "quinn-proto 0.11.12",
+ "quinn",
+ "quinn-proto",
  "rustls 0.23.27",
  "solana-connection-cache",
  "solana-keypair",
@@ -7481,8 +7433,8 @@ dependencies = [
  "nix",
  "pem",
  "percentage",
- "quinn 0.11.8",
- "quinn-proto 0.11.12",
+ "quinn",
+ "quinn-proto",
  "rand 0.8.5",
  "rustls 0.23.27",
  "smallvec",
