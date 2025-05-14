@@ -9,7 +9,9 @@ use rcgen::generate_simple_self_signed;
 
 impl ProxyTlsConfigProvider for SelfSignedTlsConfigProvider {
     fn get_server_tls_crypto_config(&self) -> QuicServerConfig {
-        self.server_crypto.clone()
+        QuicServerConfig::try_from(self.server_crypto.clone())
+            .expect("Failed to convert rustls::ServerConfig to quinn::crypto::rustls::QuicServerConfig")
+        // self.server_crypto.clone()
     }
 }
 
@@ -21,7 +23,7 @@ impl TpuClientTlsConfigProvider for SelfSignedTlsConfigProvider {
 
 pub struct SelfSignedTlsConfigProvider {
     client_crypto: rustls::ClientConfig,
-    server_crypto: QuicServerConfig,
+    server_crypto: rustls::ServerConfig,
 }
 
 impl SelfSignedTlsConfigProvider {

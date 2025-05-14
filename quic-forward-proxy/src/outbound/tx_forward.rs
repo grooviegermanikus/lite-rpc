@@ -11,7 +11,6 @@ use quinn::{ClientConfig, Endpoint, EndpointConfig, IdleTimeout, ServerConfig, T
 use solana_lite_rpc_core::network_utils::apply_gso_workaround;
 use solana_sdk::quic::QUIC_MAX_TIMEOUT;
 use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
-use solana_streamer::tls_certificates::new_dummy_x509_certificate;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,7 +20,7 @@ use quinn::crypto::rustls::QuicClientConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::RwLock;
-use crate::solana_tls_config::tls_client_config_builder;
+use crate::solana_tls_config::{new_dummy_x509_certificate, tls_client_config_builder};
 
 const MAX_PARALLEL_STREAMS: usize = 6;
 pub const PARALLEL_TPU_CONNECTION_COUNT: usize = 4;
@@ -269,28 +268,15 @@ async fn new_endpoint_with_validator_identity(validator_identity: ValidatorIdent
     // the counterpart of this function is get_remote_pubkey+get_pubkey_from_tls_certificate
     let keypair = validator_identity.get_keypair_for_tls();
     let (certificate, key) =
-        new_dummy_x509_certificate_new(keypair.as_ref());
+        new_dummy_x509_certificate(keypair.as_ref());
 
     create_tpu_client_endpoint(certificate, key)
 }
 
-// TODO move
-fn new_dummy_x509_certificate_new(
-    keypair: &solana_sdk::signature::Keypair,
-) -> (CertificateDer, PrivateKeyDer) {
-    let (cert_der, key) =
-         new_dummy_x509_certificate(keypair);
-
-    // bridge with old quinn
-    (
-        rustls::pki_types::CertificateDer::from(cert_der.as_ref()),
-        rustls::pki_types::PrivateKeyDer::try_from(key.0).unwrap(),
-    )
-}
 
 fn create_tpu_client_endpoint(
-    certificate: CertificateDer,
-    key: PrivateKeyDer,
+    certificate: CertificateDer<'static>,
+    key: PrivateKeyDer<'static>,
 ) -> Endpoint {
     let mut endpoint = {
         let client_socket =
