@@ -10,7 +10,7 @@ license = "AGPL"
 publish = false
 
 [dependencies]
-solana-lite-rpc-core = { workspace = true }
+#solana-lite-rpc-core = { workspace = true }
 solana-lite-rpc-util = { workspace = true }
 solana-sdk = { workspace = true }
 solana-streamer = { workspace = true }

@@ -5,9 +5,9 @@ use anyhow::bail;
 use clap::Parser;
 use dotenv::dotenv;
 use log::info;
-use solana_lite_rpc_core::keypair_loader::load_identity_keypair;
 use std::sync::Arc;
-
+use solana_sdk::signature::Keypair;
+use solana_sdk::signer::EncodableKey;
 use crate::validator_identity::ValidatorIdentity;
 
 pub mod cli;
@@ -40,7 +40,8 @@ pub async fn main() -> anyhow::Result<()> {
     let proxy_listener_addr = proxy_listen_addr.parse().unwrap();
 
     let validator_identity = ValidatorIdentity::new(
-        load_identity_keypair(Some(identity_keypair).filter(|s| !s.is_empty())).await?,
+        Some(identity_keypair).filter(|s| !s.is_empty())
+            .map(|key_file| Keypair::read_from_file(key_file).unwrap())
     );
 
     let tls_config = Arc::new(SelfSignedTlsConfigProvider::new_singleton_self_signed_localhost());

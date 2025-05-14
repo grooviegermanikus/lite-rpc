@@ -8,7 +8,6 @@ use anyhow::{bail, Context};
 use futures::future::join_all;
 use log::{debug, info, trace, warn};
 use quinn::{ClientConfig, Endpoint, EndpointConfig, IdleTimeout, ServerConfig, TokioRuntime, TransportConfig, VarInt};
-use solana_lite_rpc_core::network_utils::apply_gso_workaround;
 use solana_sdk::quic::QUIC_MAX_TIMEOUT;
 use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
 use std::collections::HashMap;

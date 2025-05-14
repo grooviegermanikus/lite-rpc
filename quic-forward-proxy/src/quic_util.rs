@@ -1,5 +1,4 @@
 use quinn::{Connection, TransportConfig};
-use solana_lite_rpc_core::network_utils::disable_gso;
 
 pub const ALPN_TPU_FORWARDPROXY_PROTOCOL_ID: &[u8] = b"solana-tpu-forward-proxy";
 
@@ -27,3 +26,11 @@ pub fn apply_gso_workaround(tc: &mut TransportConfig) {
     }
 }
 
+
+/// note: true means that quinn's heuristic for GSO detection is used to decide if GSO is used
+pub fn disable_gso() -> bool {
+    std::env::var("DISABLE_GSO")
+        .unwrap_or("false".to_string())
+        .parse::<bool>()
+        .expect("flag must be true or false")
+}
