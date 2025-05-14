@@ -23,7 +23,6 @@ use std::collections::{HashMap, HashSet};
 use std::net::{SocketAddr, UdpSocket};
 
 use itertools::Itertools;
-use solana_streamer::tls_certificates::new_dummy_x509_certificate;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};

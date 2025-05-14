@@ -17,9 +17,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use quinn::crypto::rustls::QuicClientConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use solana_tls_utils::new_dummy_x509_certificate;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::RwLock;
-use crate::solana_tls_config::{new_dummy_x509_certificate, tls_client_config_builder};
+use crate::solana_tls_config::{tls_client_config_builder};
 
 const MAX_PARALLEL_STREAMS: usize = 6;
 pub const PARALLEL_TPU_CONNECTION_COUNT: usize = 4;

@@ -14,6 +14,7 @@ use solana_lite_rpc_core::{
 use solana_sdk::pubkey::Pubkey;
 use solana_streamer::nonblocking::quic::compute_max_allowed_uni_streams;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::sync::{
     broadcast::{self, Receiver, Sender},
     Notify,
@@ -246,8 +247,8 @@ pub struct TpuConnectionManager {
 
 impl TpuConnectionManager {
     pub async fn new(
-        certificate: rustls::Certificate,
-        key: rustls::PrivateKey,
+        certificate: CertificateDer<'static>,
+        key: PrivateKeyDer<'static>,
         _fanout: usize,
     ) -> Self {
         let number_of_clients = 1; // fanout * 4;

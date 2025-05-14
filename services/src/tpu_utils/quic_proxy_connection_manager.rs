@@ -11,12 +11,13 @@ use std::time::Duration;
 use itertools::Itertools;
 use log::{debug, info, trace, warn};
 use quinn::{ClientConfig, Endpoint, EndpointConfig, TokioRuntime, TransportConfig, VarInt};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use solana_sdk::pubkey::Pubkey;
-
+use solana_tls_utils::SkipServerVerification;
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::{broadcast::Receiver, RwLock};
 
-use crate::quic_connection_utils::{QuicConnectionParameters, SkipServerVerification};
+use crate::quic_connection_utils::{QuicConnectionParameters};
 use solana_lite_rpc_core::network_utils::apply_gso_workaround;
 use solana_lite_rpc_core::structures::proxy_request_format::{TpuForwardingRequest, TxData};
 
@@ -40,8 +41,8 @@ const CHUNK_SIZE_PER_STREAM: usize = 20;
 
 impl QuicProxyConnectionManager {
     pub async fn new(
-        certificate: rustls::Certificate,
-        key: rustls::PrivateKey,
+        certificate: CertificateDer<'static>,
+        key: PrivateKeyDer<'static>,
         proxy_addr: SocketAddr,
     ) -> Self {
         info!("Configure Quic proxy connection manager to {}", proxy_addr);
@@ -113,8 +114,8 @@ impl QuicProxyConnectionManager {
     }
 
     fn create_proxy_client_endpoint(
-        certificate: rustls::Certificate,
-        key: rustls::PrivateKey,
+        certificate: CertificateDer<'static>,
+        key: PrivateKeyDer<'static>,
     ) -> Endpoint {
         const ALPN_TPU_FORWARDPROXY_PROTOCOL_ID: &[u8] = b"solana-tpu-forward-proxy";
 
@@ -126,11 +127,11 @@ impl QuicProxyConnectionManager {
         };
 
         let mut crypto = rustls::ClientConfig::builder()
-            .with_safe_defaults()
+            .dangerous()
             .with_custom_certificate_verifier(SkipServerVerification::new())
             .with_client_auth_cert(vec![certificate], key)
             .expect("Failed to set QUIC client certificates");
-
+        
         crypto.enable_early_data = true;
         crypto.alpn_protocols = vec![ALPN_TPU_FORWARDPROXY_PROTOCOL_ID.to_vec()];
 

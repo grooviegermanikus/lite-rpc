@@ -14,6 +14,8 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use solana_tls_utils::SkipServerVerification;
 use tokio::{sync::broadcast, time::timeout};
 
 lazy_static::lazy_static! {
@@ -130,7 +132,7 @@ impl Default for QuicConnectionParameters {
 pub struct QuicConnectionUtils {}
 
 impl QuicConnectionUtils {
-    pub fn create_endpoint(certificate: rustls::Certificate, key: rustls::PrivateKey) -> Endpoint {
+    pub fn create_endpoint(certificate: CertificateDer<'static>, key: PrivateKeyDer<'static>,) -> Endpoint {
         const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 64 * 1024 * 1024;
         const DATAGRAM_SEND_BUFFER_SIZE: usize = 64 * 1024 * 1024;
         const INITIAL_MAXIMUM_TRANSMISSION_UNIT: u16 = MINIMUM_MAXIMUM_TRANSMISSION_UNIT;
@@ -150,10 +152,15 @@ impl QuicConnectionUtils {
         };
 
         let mut crypto = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_custom_certificate_verifier(Arc::new(SkipServerVerification {}))
-            .with_client_auth_cert(vec![certificate], key)
-            .unwrap();
+            .dangerous()
+            .with_custom_certificate_verifier(SkipServerVerification::new())
+            .with_client_auth_cert(vec![certificate], key).unwrap();
+
+        // let mut crypto = rustls::ClientConfig::builder()
+        //     .with_safe_defaults()
+        //     .with_custom_certificate_verifier(Arc::new(SkipServerVerification {}))
+        //     .with_client_auth_cert(vec![certificate], key)
+        //     .unwrap();
         crypto.enable_early_data = true;
         crypto.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
 
@@ -395,24 +402,3 @@ impl QuicConnectionUtils {
     }
 }
 
-pub struct SkipServerVerification;
-
-impl SkipServerVerification {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self)
-    }
-}
-
-impl rustls::client::ServerCertVerifier for SkipServerVerification {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::ServerCertVerified::assertion())
-    }
-}

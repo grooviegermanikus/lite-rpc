@@ -14,6 +14,7 @@ publish = false
 #solana-lite-rpc-util = { workspace = true }
 solana-sdk = "~2.2.2"
 solana-streamer = "~2.2.7"
+solana-tls-utils = "~2.2.2"
 #solana-transaction-status = { workspace = true }
 solana-net-utils = "~2.2.2"
 rustls = { version = "0.23.22", features = ["ring"]}

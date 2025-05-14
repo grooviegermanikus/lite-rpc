@@ -16,6 +16,7 @@ solana-lite-rpc-services = { workspace = true }
 solana-lite-rpc-quic-forward-proxy = { path = "../quic-forward-proxy" }
 solana-sdk = { workspace = true }
 solana-streamer = { workspace = true }
+solana-tls-utils = { workspace = true }
 solana-transaction-status = { workspace = true }
 solana-net-utils = { workspace = true }
 rustls = { workspace = true }
