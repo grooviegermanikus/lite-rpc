@@ -96,7 +96,7 @@ quinn-proto = "0.11.8"
 rustls = { version = "0.23.22", default-features = false, features = [] }
 tonic = "0.12"
 tonic-health = "0.12"
-rcgen = "0.9.3"
+rcgen = "0.13.2"
 
 [patch.crates-io.curve25519-dalek]
 git = "https://github.com/anza-xyz/curve25519-dalek.git"

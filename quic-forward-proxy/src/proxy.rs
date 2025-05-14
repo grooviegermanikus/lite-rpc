@@ -14,14 +14,13 @@ use log::info;
 pub struct QuicForwardProxy {
     // endpoint: Endpoint,
     validator_identity: ValidatorIdentity,
-    tls_config: Arc<SelfSignedTlsConfigProvider>,
     pub proxy_listener_addr: SocketAddr,
 }
 
 impl QuicForwardProxy {
     pub async fn new(
         proxy_listener_addr: SocketAddr,
-        tls_config: Arc<SelfSignedTlsConfigProvider>,
+        // tls_config: Arc<SelfSignedTlsConfigProvider>,
         validator_identity: ValidatorIdentity,
     ) -> anyhow::Result<Self> {
         info!("Quic proxy uses validator identity {}", validator_identity);
@@ -29,7 +28,6 @@ impl QuicForwardProxy {
         Ok(Self {
             proxy_listener_addr,
             validator_identity,
-            tls_config,
         })
     }
 
@@ -39,7 +37,7 @@ impl QuicForwardProxy {
         let (forwarder_channel, forward_receiver) = tokio::sync::mpsc::channel(1000);
 
         let proxy_listener =
-            proxy_listener::ProxyListener::new(self.proxy_listener_addr, self.tls_config);
+            proxy_listener::ProxyListener::new(self.proxy_listener_addr);
 
         let quic_proxy = tokio::spawn(async move {
             proxy_listener

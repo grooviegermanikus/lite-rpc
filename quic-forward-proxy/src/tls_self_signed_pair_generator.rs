@@ -3,9 +3,10 @@ use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use crate::quic_util::{ALPN_TPU_FORWARDPROXY_PROTOCOL_ID};
 use crate::tls_config_provider_client::TpuClientTlsConfigProvider;
 use crate::tls_config_provider_server::ProxyTlsConfigProvider;
-use rcgen::{generate_simple_self_signed, Certificate, CertifiedKey, KeyPair};
-use rustls::pki_types::PrivateKeyDer;
+use rcgen::{generate_simple_self_signed, Certificate, KeyPair};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::{ClientConfig, ServerConfig};
+use rustls::sign::CertifiedKey;
 // use rustls::{Certificate, ClientConfig, PrivateKey, ServerConfig};
 // use solana_lite_rpc_quic_forward_proxy::skip_server_verification::SkipServerVerification;
 // use crate::solana_tls_config::tls_server_config_builder;
@@ -32,13 +33,14 @@ pub struct SelfSignedTlsConfigProvider {
 impl SelfSignedTlsConfigProvider {
     pub fn new_singleton_self_signed_localhost() -> Self {
         // note: this check could be relaxed when you know what you are doing!
-        let CertifiedKey { cert, key_pair } = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
-
-        let key = PrivateKeyDer::Pkcs8(key_pair.serialize_der().into());
-        let transport_config = Arc::new(transport_config());
-        let mut server_config =
-            quinn::ServerConfig::with_single_cert(vec![cert.der().clone()], key).unwrap();
-        server_config.transport_config(transport_config.clone());
+        // let
+        //     CertifiedKey { cert, key, .. } = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        // 
+        // let key = PrivateKeyDer::Pkcs8(key.serialize_der().into());
+        // let transport_config = Arc::new(transport_config());
+        // let mut server_config =
+        //     quinn::ServerConfig::with_single_cert(cert.as_slice(), key).unwrap();
+        // server_config.transport_config(transport_config.clone());
 
 
         // let mut server_config = quinn::ServerConfig::with_single_cert(cert_chain, key).unwrap();
@@ -47,11 +49,12 @@ impl SelfSignedTlsConfigProvider {
 
         // let hostnames = vec!["localhost".to_string()];
         // let (certificate, private_key) = Self::gen_tls_certificate_and_key(hostnames);
-        let server_crypto = Self::build_server_crypto(cert, key_pair);
-        Self {
-            client_crypto: Self::build_client_crypto_insecure(),
-            server_crypto,
-        }
+        // let server_crypto = Self::build_server_crypto(cert, key);
+        // Self {
+        //     client_crypto: Self::build_client_crypto_insecure(),
+        //     server_crypto,
+        // }
+        todo!()
     }
 
     // fn gen_tls_certificate_and_key(hostnames: Vec<String>) -> (Certificate, PrivateKey) {

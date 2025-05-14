@@ -1,3 +1,4 @@
+use std::error::Error;
 use crate::proxy_request_format::TpuForwardingRequest;
 use crate::quic_util::connection_stats;
 use crate::shared::ForwardPacket;
@@ -12,6 +13,7 @@ use std::net::{Incoming, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use quinn::crypto::rustls::QuicServerConfig;
+use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 use tokio::sync::mpsc::Sender;
 
 // note: setting this to "1" did not make a difference!
@@ -19,18 +21,15 @@ use tokio::sync::mpsc::Sender;
 const MAX_CONCURRENT_UNI_STREAMS: u32 = 24;
 
 pub struct ProxyListener {
-    tls_config: Arc<SelfSignedTlsConfigProvider>,
     proxy_listener_addr: SocketAddr,
 }
 
 impl ProxyListener {
     pub fn new(
         proxy_listener_addr: SocketAddr,
-        tls_config: Arc<SelfSignedTlsConfigProvider>,
     ) -> Self {
         Self {
             proxy_listener_addr,
-            tls_config,
         }
     }
 
@@ -41,7 +40,7 @@ impl ProxyListener {
         );
 
         let endpoint =
-            Self::new_proxy_listen_server_endpoint(&self.tls_config, self.proxy_listener_addr)
+            Self::new_proxy_listen_server_endpoint(self.proxy_listener_addr)
                 .await;
 
         while let Some(incoming) = endpoint.accept().await {
@@ -66,14 +65,18 @@ impl ProxyListener {
         bail!("TPU Quic Proxy server stopped");
     }
 
+
+
     async fn new_proxy_listen_server_endpoint(
-        tls_config: &SelfSignedTlsConfigProvider,
+        // tls_config: &SelfSignedTlsConfigProvider,
         proxy_listener_addr: SocketAddr,
     ) -> Endpoint {
-        let server_tls_config: QuicServerConfig = tls_config.get_server_tls_crypto_config();
-        // let server_tls_config = QuicServerConfig::try_from(server_tls_config).unwrap();
-        let mut quinn_server_config = ServerConfig::with_crypto(Arc::new(server_tls_config));
-        
+        // let server_tls_config: QuicServerConfig = tls_config.get_server_tls_crypto_config();
+
+        let (mut quinn_server_config, _) = configure_server().unwrap();
+        // let server_tls_config = QuicServerConfig::try_from(server_config).unwrap();
+        // let mut quinn_server_config: quinn::ServerConfig = ServerConfig::with_crypto(Arc::new(server_tls_config));
+
 
         // note: this config must be aligned with lite-rpc's client config
         let transport_config = Arc::get_mut(&mut quinn_server_config.transport).unwrap();
@@ -177,4 +180,21 @@ impl ProxyListener {
             }; // -- result
         } // -- loop
     }
+}
+
+
+// TODO move
+// from quinn examples
+fn configure_server()
+    -> Result<(ServerConfig, CertificateDer<'static>), Box<dyn Error + Send + Sync + 'static>> {
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+    let cert_der = CertificateDer::from(cert.cert);
+    let priv_key = PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der());
+
+    let mut server_config =
+        ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key.into())?;
+    let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
+    transport_config.max_concurrent_uni_streams(0_u8.into());
+
+    Ok((server_config, cert_der))
 }
