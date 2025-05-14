@@ -28,7 +28,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
-use solana_streamer::quic::StreamerStats;
+use solana_streamer::quic::{QuicServerParams, StreamerStats};
 use solana_tls_utils::new_dummy_x509_certificate;
 use tokio::runtime::Builder;
 
@@ -431,14 +431,24 @@ async fn solana_quic_streamer_start() {
             &keypair,
             sender,
             exit.clone(),
-            1,
+            // 1,
             staked_nodes,
-            10,
-            10,
-            9999, // max_streams_per_ms
-            10,
-            Duration::from_millis(1000),
-            Duration::from_millis(1000),
+            QuicServerParams {
+                max_connections_per_peer: MAX_QUIC_CONNECTIONS_PER_PEER,
+                max_staked_connections: 10,
+                max_unstaked_connections: 10,
+                max_streams_per_ms: 9999,
+                max_connections_per_ipaddr_per_min: 10,
+                wait_for_chunk_timeout: Duration::from_millis(1000),
+                coalesce: Duration::from_millis(1000),
+                coalesce_channel_size: 1000,
+            }
+            // 10,
+            // 10,
+            // 9999, // max_streams_per_ms
+            // 10,
+            // Duration::from_millis(1000),
+            // Duration::from_millis(1000),
         )
         .unwrap();
 
@@ -668,7 +678,7 @@ async fn start_quic_proxy(proxy_listen_addr: SocketAddr) -> anyhow::Result<()> {
     let tls_config = Arc::new(SelfSignedTlsConfigProvider::new_singleton_self_signed_localhost());
     let proxy_service = QuicForwardProxy::new(
         proxy_listen_addr,
-        tls_config,
+        // tls_config,
         random_unstaked_validator_identity,
     )
     .await?
@@ -707,14 +717,18 @@ impl SolanaQuicStreamer {
                 &keypair,
                 sender,
                 exit.clone(),
-                MAX_QUIC_CONNECTIONS_PER_PEER,
+                // MAX_QUIC_CONNECTIONS_PER_PEER,
                 staked_nodes,
-                10,
-                10,
-                9999, // max_streams_per_ms
-                10,
-                Duration::from_millis(1000),
-                Duration::from_millis(1000),
+                QuicServerParams {
+                    max_connections_per_peer: MAX_QUIC_CONNECTIONS_PER_PEER,
+                    max_staked_connections: 10,
+                    max_unstaked_connections: 10,
+                    max_streams_per_ms: 9999,
+                    max_connections_per_ipaddr_per_min: 10,
+                    wait_for_chunk_timeout: Duration::from_millis(1000),
+                    coalesce: Duration::from_millis(1000),
+                    coalesce_channel_size: 1000,
+                },
             )
             .unwrap();
 
