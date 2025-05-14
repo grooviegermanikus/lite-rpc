@@ -16,7 +16,7 @@ solana-sdk = { workspace = true }
 solana-streamer = { workspace = true }
 solana-transaction-status = { workspace = true }
 solana-net-utils = { workspace = true }
-rustls = { version = "0.23.22", features = []}
+rustls = { version = "0.23.22", features = ["ring"]}
 serde = { workspace = true }
 serde_json = { workspace = true }
 bincode = { workspace = true }

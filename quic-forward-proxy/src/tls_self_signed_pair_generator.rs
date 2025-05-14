@@ -1,8 +1,11 @@
+use std::sync::Arc;
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use crate::quic_util::{ALPN_TPU_FORWARDPROXY_PROTOCOL_ID};
 use crate::tls_config_provider_client::TpuClientTlsConfigProvider;
 use crate::tls_config_provider_server::ProxyTlsConfigProvider;
-use rcgen::generate_simple_self_signed;
+use rcgen::{generate_simple_self_signed, Certificate, CertifiedKey, KeyPair};
+use rustls::pki_types::PrivateKeyDer;
+use rustls::{ClientConfig, ServerConfig};
 // use rustls::{Certificate, ClientConfig, PrivateKey, ServerConfig};
 // use solana_lite_rpc_quic_forward_proxy::skip_server_verification::SkipServerVerification;
 // use crate::solana_tls_config::tls_server_config_builder;
@@ -28,24 +31,36 @@ pub struct SelfSignedTlsConfigProvider {
 
 impl SelfSignedTlsConfigProvider {
     pub fn new_singleton_self_signed_localhost() -> Self {
-        // // note: this check could be relaxed when you know what you are doing!
+        // note: this check could be relaxed when you know what you are doing!
+        let CertifiedKey { cert, key_pair } = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+
+        let key = PrivateKeyDer::Pkcs8(key_pair.serialize_der().into());
+        let transport_config = Arc::new(transport_config());
+        let mut server_config =
+            quinn::ServerConfig::with_single_cert(vec![cert.der().clone()], key).unwrap();
+        server_config.transport_config(transport_config.clone());
+
+
+        // let mut server_config = quinn::ServerConfig::with_single_cert(cert_chain, key).unwrap();
+        // server_config.transport = Arc::new(transport_config(opt));
+
+
         // let hostnames = vec!["localhost".to_string()];
         // let (certificate, private_key) = Self::gen_tls_certificate_and_key(hostnames);
-        // let server_crypto = Self::build_server_crypto(certificate, private_key);
-        // Self {
-        //     client_crypto: Self::build_client_crypto_insecure(),
-        //     server_crypto,
-        // }
-        todo!()
+        let server_crypto = Self::build_server_crypto(cert, key_pair);
+        Self {
+            client_crypto: Self::build_client_crypto_insecure(),
+            server_crypto,
+        }
     }
 
     // fn gen_tls_certificate_and_key(hostnames: Vec<String>) -> (Certificate, PrivateKey) {
-        // let cert = generate_simple_self_signed(hostnames).unwrap();
-        // let key = cert.serialize_private_key_der();
-        // (Certificate(cert.serialize_der().unwrap()), PrivateKey(key))
+    //     let cert = generate_simple_self_signed(hostnames).unwrap();
+    //     let key = cert.serialize_private_key_der();
+    //     (Certificate(cert.serialize_der().unwrap()), PrivateKey(key))
     // }
 
-    fn build_client_crypto_insecure() -> QuicClientConfig {
+    fn build_client_crypto_insecure() -> ClientConfig {
         todo!()
         // let mut client_crypto = rustls::ClientConfig::builder()
         //     .with_safe_defaults()
@@ -57,23 +72,39 @@ impl SelfSignedTlsConfigProvider {
         // client_crypto
     }
 
-    // fn build_server_crypto(server_cert: Certificate, server_key: PrivateKey) -> ServerConfig {
+    fn build_server_crypto(server_cert: Certificate, key_pair: KeyPair) -> ServerConfig {
         // let (server_cert, server_key) = gen_tls_certificate_and_key();
 
-        // let mut server_crypto = rustls::ServerConfig::builder()
-        //     // FIXME we want client auth
-        //     .with_safe_defaults()
-        //     .with_no_client_auth()
-        //     .with_single_cert(vec![server_cert], server_key)
-        //     .unwrap();
-        // server_crypto.alpn_protocols = vec![ALPN_TPU_FORWARDPROXY_PROTOCOL_ID.to_vec()];
-        // server_crypto
+        let server_key = PrivateKeyDer::Pkcs8(key_pair.serialize_der().into());
 
-
-        // todo!()
-    // }
+        let mut server_crypto = rustls::ServerConfig::builder()
+            // FIXME we want client auth
+            // .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(vec![server_cert.der().clone()], server_key)
+            .unwrap();
+        server_crypto.alpn_protocols = vec![ALPN_TPU_FORWARDPROXY_PROTOCOL_ID.to_vec()];
+        server_crypto
+    }
 
     // pub fn get_client_tls_crypto_config(&self) -> QuicClientConfig {
     //     &self.client_crypto
     // }
+
+}
+
+
+fn transport_config() -> quinn::TransportConfig {
+    // High stream windows are chosen because the amount of concurrent streams
+    // is configurable as a parameter.
+    let mut config = quinn::TransportConfig::default();
+    // TODO tune
+    // config.max_concurrent_uni_streams(opt.max_streams.try_into().unwrap());
+    // config.initial_mtu(opt.initial_mtu);
+
+    let mut acks = quinn::AckFrequencyConfig::default();
+    acks.ack_eliciting_threshold(10u32.into());
+    config.ack_frequency_config(Some(acks));
+
+    config
 }
