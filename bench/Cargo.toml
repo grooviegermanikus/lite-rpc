@@ -15,7 +15,7 @@ path = "src/benchnew.rs"
 [dependencies]
 
 websocket-tungstenite-retry = { git = "https://github.com/grooviegermanikus/websocket-tungstenite-retry.git", tag = "v0.8.0" }
-jsonrpsee-types = "0.22.2"
+#jsonrpsee-types = "0.25.1"
 
 clap = { workspace = true }
 csv = "1.2.1"
@@ -30,7 +30,7 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { version = "1.28.2", features = ["full", "fs"]}
+tokio = { version = "1.43.0", features = ["full", "fs"]}
 tracing-subscriber = { workspace = true, features = ["std", "env-filter"] }
 rand = "0.8.5"
 rand_chacha = "0.3.1"

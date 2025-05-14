@@ -41,7 +41,7 @@ quinn = "0.11.8"
 async-trait = { workspace = true }
 futures = { workspace = true }
 chrono = { workspace = true }
-tokio = { version = "1.28.2", features = ["full", "fs"]}
+tokio = { version = "1.43.0", features = ["full", "fs"]}
 rcgen = { workspace = true}
 spl-memo = "3.0.1"
 

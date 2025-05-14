@@ -6,7 +6,7 @@ use solana_rpc_client_api::config::{
     RpcTransactionLogsFilter,
 };
 
-pub type Result<T> = std::result::Result<T, jsonrpsee::core::Error>;
+// pub type Result<T> = std::result::Result<T, jsonrpsee::types::error::ServerError>;
 
 #[rpc(server)]
 pub trait LiteRpcPubSub {

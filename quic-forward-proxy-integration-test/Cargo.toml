@@ -41,7 +41,7 @@ async-channel = { workspace = true }
 quinn = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-tokio = { version = "1.28.2", features = ["full", "fs"]}
+tokio = { version = "1.43.0", features = ["full", "fs"]}
 futures = { workspace = true }
 rcgen = { workspace = true}
 spl-memo = "3.0.1"

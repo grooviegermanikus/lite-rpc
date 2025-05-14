@@ -4,7 +4,7 @@ use crate::{
 };
 
 use hyper::Method;
-use jsonrpsee::server::ServerBuilder;
+use jsonrpsee::server::{RpcServiceBuilder, ServerBuilder};
 use solana_lite_rpc_core::AnyhowJoinHandle;
 use std::time::Duration;
 use tower_http::cors::{Any, CorsLayer};
@@ -58,10 +58,11 @@ pub async fn start_servers(
         .allow_origin(Any)
         .allow_headers(Any);
 
-    let middleware = tower::ServiceBuilder::new().layer(cors);
+    let middleware = RpcServiceBuilder::new().layer(cors);
+    
 
     let http_server_handle = ServerBuilder::default()
-        .set_middleware(middleware)
+        .set_rpc_middleware(middleware)
         .max_connections(server_configuration.max_connection)
         .max_request_body_size(server_configuration.max_response_body_size)
         .max_response_body_size(server_configuration.max_response_body_size)
