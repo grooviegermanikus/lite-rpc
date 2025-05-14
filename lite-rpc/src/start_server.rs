@@ -50,19 +50,19 @@ pub async fn start_servers(
         .await?
         .start(pubsub);
 
-    let cors = CorsLayer::new()
-        .max_age(Duration::from_secs(86400))
-        // Allow `POST` when accessing the resource
-        .allow_methods([Method::POST, Method::GET, Method::OPTIONS])
-        // Allow requests from any origin
-        .allow_origin(Any)
-        .allow_headers(Any);
+    // TODO check if we need that
+    // let cors = CorsLayer::new()
+    //     .max_age(Duration::from_secs(86400))
+    //     // Allow `POST` when accessing the resource
+    //     .allow_methods([Method::POST, Method::GET, Method::OPTIONS])
+    //     // Allow requests from any origin
+    //     .allow_origin(Any)
+    //     .allow_headers(Any);
 
-    let middleware = RpcServiceBuilder::new().layer(cors);
-    
+    // let middleware = RpcServiceBuilder::new().layer(cors);
 
     let http_server_handle = ServerBuilder::default()
-        .set_rpc_middleware(middleware)
+        // .set_rpc_middleware(middleware)
         .max_connections(server_configuration.max_connection)
         .max_request_body_size(server_configuration.max_response_body_size)
         .max_response_body_size(server_configuration.max_response_body_size)
