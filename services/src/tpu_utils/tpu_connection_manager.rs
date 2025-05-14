@@ -254,7 +254,7 @@ impl TpuConnectionManager {
         let number_of_clients = 1; // fanout * 4;
         Self {
             endpoints: RotatingQueue::new(number_of_clients, || {
-                QuicConnectionUtils::create_endpoint(certificate.clone(), key.clone())
+                QuicConnectionUtils::create_endpoint(certificate.clone(), key.clone_key())
             }),
             identity_to_active_connection: Arc::new(DashMap::new()),
         }

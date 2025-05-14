@@ -17,7 +17,7 @@ use solana_sdk::signature::{Keypair, Signature, Signer};
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
 use solana_streamer::nonblocking::quic::{ConnectionPeerType, SpawnNonBlockingServerResult};
 use solana_streamer::packet::PacketBatch;
-use solana_streamer::quic::StreamStats;
+// use solana_streamer::quic::StreamStats;
 use solana_streamer::streamer::StakedNodes;
 use std::collections::{HashMap, HashSet};
 use std::net::{SocketAddr, UdpSocket};
@@ -28,6 +28,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
+use solana_streamer::quic::StreamerStats;
+use solana_tls_utils::new_dummy_x509_certificate;
 use tokio::runtime::Builder;
 
 use tokio::task::{yield_now, JoinHandle};
@@ -684,7 +686,7 @@ struct SolanaQuicStreamer {
     sock: UdpSocket,
     exit: Arc<AtomicBool>,
     join_handler: JoinHandle<()>,
-    stats: Arc<StreamStats>,
+    stats: Arc<StreamerStats>,
 }
 
 impl SolanaQuicStreamer {
