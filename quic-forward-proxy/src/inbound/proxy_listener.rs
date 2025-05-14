@@ -9,7 +9,7 @@ use log::{debug, error, info, trace, warn};
 use quinn::{Connecting, Endpoint, ServerConfig, VarInt};
 use solana_lite_rpc_core::network_utils::apply_gso_workaround;
 use solana_sdk::packet::PACKET_DATA_SIZE;
-use std::net::SocketAddr;
+use std::net::{Incoming, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
@@ -44,7 +44,9 @@ impl ProxyListener {
             Self::new_proxy_listen_server_endpoint(&self.tls_config, self.proxy_listener_addr)
                 .await;
 
-        while let Some(connecting) = endpoint.accept().await {
+        while let Some(incoming) = endpoint.accept().await {
+            let _remote_addr: SocketAddr = incoming.remote_address();
+            let connecting = incoming.accept().unwrap(); // TODO unwrap
             let forwarder_channel_copy = forwarder_channel.clone();
             tokio::spawn(async move {
                 match Self::handle_client_connection(connecting, forwarder_channel_copy).await {
@@ -82,17 +84,17 @@ impl ProxyListener {
         transport_config.stream_receive_window((PACKET_DATA_SIZE as u32).into());
         transport_config
             .receive_window((PACKET_DATA_SIZE as u32 * MAX_CONCURRENT_UNI_STREAMS).into());
-        apply_gso_workaround(transport_config);
+        // apply_gso_workaround(transport_config); // TODO
 
         Endpoint::server(quinn_server_config, proxy_listener_addr).unwrap()
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     async fn handle_client_connection(
-        client_conn_handshake: Connecting,
+        connecting: Connecting,
         forwarder_channel: Sender<ForwardPacket>,
     ) -> anyhow::Result<()> {
-        let client_connection = client_conn_handshake.await.context("handshake")?;
+        let client_connection = connecting.await.context("handshake")?;
 
         debug!(
             "inbound connection established, client {}",

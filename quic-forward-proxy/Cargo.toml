@@ -16,7 +16,7 @@ solana-sdk = { workspace = true }
 solana-streamer = { workspace = true }
 solana-transaction-status = { workspace = true }
 solana-net-utils = { workspace = true }
-rustls = { workspace = true, features = ["dangerous_configuration"]}
+rustls = { version = "0.23.22", features = []}
 serde = { workspace = true }
 serde_json = { workspace = true }
 bincode = { workspace = true }
@@ -36,7 +36,7 @@ prometheus = { workspace = true }
 lazy_static = { workspace = true }
 dotenv = { workspace = true }
 async-channel = { workspace = true }
-quinn = { workspace = true }
+quinn = "0.11.8"
 async-trait = { workspace = true }
 futures = { workspace = true }
 chrono = { workspace = true }

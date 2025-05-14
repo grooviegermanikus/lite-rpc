@@ -1,6 +1,5 @@
 use crate::outbound::debouncer::Debouncer;
 use crate::outbound::sharder::Sharder;
-use crate::quic_util::SkipServerVerification;
 use crate::quinn_auto_reconnect::AutoReconnect;
 use crate::shared::ForwardPacket;
 use crate::util::timeout_fallback;
@@ -8,9 +7,7 @@ use crate::validator_identity::ValidatorIdentity;
 use anyhow::{bail, Context};
 use futures::future::join_all;
 use log::{debug, info, trace, warn};
-use quinn::{
-    ClientConfig, Endpoint, EndpointConfig, IdleTimeout, TokioRuntime, TransportConfig, VarInt,
-};
+use quinn::{ClientConfig, Endpoint, EndpointConfig, IdleTimeout, ServerConfig, TokioRuntime, TransportConfig, VarInt};
 use solana_lite_rpc_core::network_utils::apply_gso_workaround;
 use solana_sdk::quic::QUIC_MAX_TIMEOUT;
 use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
@@ -20,8 +17,12 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use quinn::crypto::rustls::QuicClientConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::RwLock;
+use solana_lite_rpc_quic_forward_proxy::skip_server_verification::SkipServerVerification;
+use crate::solana_tls_config::tls_client_config_builder;
 
 const MAX_PARALLEL_STREAMS: usize = 6;
 pub const PARALLEL_TPU_CONNECTION_COUNT: usize = 4;
@@ -274,8 +275,8 @@ async fn new_endpoint_with_validator_identity(validator_identity: ValidatorIdent
 }
 
 fn create_tpu_client_endpoint(
-    certificate: rustls::Certificate,
-    key: rustls::PrivateKey,
+    certificate: CertificateDer,
+    key: PrivateKeyDer,
 ) -> Endpoint {
     let mut endpoint = {
         let client_socket =
@@ -287,17 +288,22 @@ fn create_tpu_client_endpoint(
             .expect("create_endpoint quinn::Endpoint::new")
     };
 
-    let mut crypto = rustls::ClientConfig::builder()
-        .with_safe_defaults()
-        .with_custom_certificate_verifier(SkipServerVerification::new())
+    let mut config = tls_client_config_builder()
         .with_client_auth_cert(vec![certificate], key)
         .expect("Failed to set QUIC client certificates");
+        
+    // let mut crypto = rustls::ClientConfig::builder()
+    //     .with_safe_defaults()
+    //     .with_custom_certificate_verifier(SkipServerVerification::new())
+    //     .with_client_auth_cert(vec![certificate], key)
+    //     .expect("Failed to set QUIC client certificates");
 
-    crypto.enable_early_data = true;
+    config.enable_early_data = true;
 
-    crypto.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
+    config.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
 
-    let mut config = ClientConfig::new(Arc::new(crypto));
+
+    // let mut config = ClientConfig::new(Arc::new(crypto));
 
     // note: this should be aligned with solana quic server's endpoint config
     let mut transport_config = TransportConfig::default();
@@ -307,10 +313,13 @@ fn create_tpu_client_endpoint(
     let timeout = IdleTimeout::try_from(QUIC_MAX_TIMEOUT).unwrap();
     transport_config.max_idle_timeout(Some(timeout));
     transport_config.keep_alive_interval(Some(Duration::from_millis(500)));
-    apply_gso_workaround(&mut transport_config);
+    // apply_gso_workaround(&mut transport_config); // TODO
 
-    config.transport_config(Arc::new(transport_config));
-
+    let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));
+    // let mut config = ServerConfig::with_crypto(Arc::new(config));
+    config
+        .transport_config(Arc::new(transport_config))
+        .migration(false);
     endpoint.set_default_client_config(config);
 
     endpoint

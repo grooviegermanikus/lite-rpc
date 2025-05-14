@@ -1,29 +1,8 @@
-use quinn::Connection;
-use std::sync::Arc;
+use quinn::{Connection, TransportConfig};
+use solana_lite_rpc_core::network_utils::disable_gso;
 
 pub const ALPN_TPU_FORWARDPROXY_PROTOCOL_ID: &[u8] = b"solana-tpu-forward-proxy";
 
-pub struct SkipServerVerification;
-
-impl SkipServerVerification {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self)
-    }
-}
-
-impl rustls::client::ServerCertVerifier for SkipServerVerification {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::ServerCertVerified::assertion())
-    }
-}
 
 //  stable_id 140266619216912, rtt=2.156683ms,
 // stats FrameStats { ACK: 3, CONNECTION_CLOSE: 0, CRYPTO: 3,
@@ -40,3 +19,11 @@ pub fn connection_stats(connection: &Connection) -> String {
         connection.stats().path.rtt
     )
 }
+/// env flag to optionally disable GSO (generic segmentation offload) on environments where Quinn cannot detect it properly
+/// see https://github.com/quinn-rs/quinn/pull/1671
+pub fn apply_gso_workaround(tc: &mut TransportConfig) {
+    if disable_gso() {
+        tc.enable_segmentation_offload(false);
+    }
+}
+
