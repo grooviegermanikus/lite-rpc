@@ -15,3 +15,4 @@ mod util;
 pub mod validator_identity;
 pub mod skip_client_verification;
 pub mod skip_server_verification;
+pub mod solana_tls_config;

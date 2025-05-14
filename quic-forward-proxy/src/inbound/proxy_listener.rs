@@ -12,6 +12,7 @@ use solana_sdk::packet::PACKET_DATA_SIZE;
 use std::net::{Incoming, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
+use quinn::crypto::rustls::QuicServerConfig;
 use tokio::sync::mpsc::Sender;
 
 // note: setting this to "1" did not make a difference!
@@ -70,8 +71,10 @@ impl ProxyListener {
         tls_config: &SelfSignedTlsConfigProvider,
         proxy_listener_addr: SocketAddr,
     ) -> Endpoint {
-        let server_tls_config = tls_config.get_server_tls_crypto_config();
+        let server_tls_config: QuicServerConfig = tls_config.get_server_tls_crypto_config();
+        // let server_tls_config = QuicServerConfig::try_from(server_tls_config).unwrap();
         let mut quinn_server_config = ServerConfig::with_crypto(Arc::new(server_tls_config));
+        
 
         // note: this config must be aligned with lite-rpc's client config
         let transport_config = Arc::get_mut(&mut quinn_server_config.transport).unwrap();

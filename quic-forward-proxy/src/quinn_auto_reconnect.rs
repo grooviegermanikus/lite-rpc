@@ -54,7 +54,7 @@ impl AutoReconnect {
             .await
             .context("open uni stream for sending")??;
         send_stream.write_all(payload.as_slice()).await?;
-        send_stream.finish().await?;
+        send_stream.finish()?;
         Ok(())
     }
 

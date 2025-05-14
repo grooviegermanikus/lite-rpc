@@ -6,8 +6,8 @@ use {
     },
     std::sync::Arc,
 };
-use solana_lite_rpc_quic_forward_proxy::skip_client_verification::SkipClientVerification;
-use solana_lite_rpc_quic_forward_proxy::skip_server_verification::SkipServerVerification;
+use crate::skip_server_verification::SkipServerVerification;
+use crate::skip_client_verification::SkipClientVerification;
 
 pub fn tls_client_config_builder() -> ConfigBuilder<ClientConfig, WantsClientCert> {
     ClientConfig::builder_with_provider(Arc::new(crypto_provider()))

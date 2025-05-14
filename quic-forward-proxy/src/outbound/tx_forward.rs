@@ -21,7 +21,6 @@ use quinn::crypto::rustls::QuicClientConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::RwLock;
-use solana_lite_rpc_quic_forward_proxy::skip_server_verification::SkipServerVerification;
 use crate::solana_tls_config::tls_client_config_builder;
 
 const MAX_PARALLEL_STREAMS: usize = 6;
@@ -268,10 +267,25 @@ async fn new_endpoint_with_validator_identity(validator_identity: ValidatorIdent
         validator_identity
     );
     // the counterpart of this function is get_remote_pubkey+get_pubkey_from_tls_certificate
+    let keypair = validator_identity.get_keypair_for_tls();
     let (certificate, key) =
-        new_dummy_x509_certificate(validator_identity.get_keypair_for_tls().as_ref());
+        new_dummy_x509_certificate_new(keypair.as_ref());
 
     create_tpu_client_endpoint(certificate, key)
+}
+
+// TODO move
+fn new_dummy_x509_certificate_new(
+    keypair: &solana_sdk::signature::Keypair,
+) -> (CertificateDer, PrivateKeyDer) {
+    let (cert_der, key) =
+         new_dummy_x509_certificate(keypair);
+
+    // bridge with old quinn
+    (
+        rustls::pki_types::CertificateDer::from(cert_der.as_ref()),
+        rustls::pki_types::PrivateKeyDer::try_from(key.0).unwrap(),
+    )
 }
 
 fn create_tpu_client_endpoint(
@@ -291,7 +305,7 @@ fn create_tpu_client_endpoint(
     let mut config = tls_client_config_builder()
         .with_client_auth_cert(vec![certificate], key)
         .expect("Failed to set QUIC client certificates");
-        
+
     // let mut crypto = rustls::ClientConfig::builder()
     //     .with_safe_defaults()
     //     .with_custom_certificate_verifier(SkipServerVerification::new())
@@ -318,8 +332,8 @@ fn create_tpu_client_endpoint(
     let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));
     // let mut config = ServerConfig::with_crypto(Arc::new(config));
     config
-        .transport_config(Arc::new(transport_config))
-        .migration(false);
+        .transport_config(Arc::new(transport_config));
+        // .migration(false); // TODO
     endpoint.set_default_client_config(config);
 
     endpoint

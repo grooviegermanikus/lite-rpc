@@ -23,6 +23,9 @@ pub mod tls_config_provider_server;
 pub mod tls_self_signed_pair_generator;
 mod util;
 mod validator_identity;
+mod solana_tls_config;
+mod skip_client_verification;
+mod skip_server_verification;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
 pub async fn main() -> anyhow::Result<()> {
