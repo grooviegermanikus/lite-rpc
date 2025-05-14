@@ -17,7 +17,7 @@ solana-streamer = "~2.2.7"
 solana-tls-utils = "~2.2.2"
 #solana-transaction-status = { workspace = true }
 solana-net-utils = "~2.2.2"
-rustls = { version = "0.23.22", features = ["ring"]}
+rustls = { workspace = true, features = ["ring"]}
 serde = { workspace = true }
 serde_json = { workspace = true }
 bincode = { workspace = true }
