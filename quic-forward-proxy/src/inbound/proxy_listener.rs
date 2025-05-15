@@ -1,6 +1,6 @@
 use std::error::Error;
 use crate::proxy_request_format::TpuForwardingRequest;
-use crate::quic_util::connection_stats;
+use crate::quic_util::{connection_stats, ALPN_TPU_FORWARDPROXY_PROTOCOL_ID};
 use crate::shared::ForwardPacket;
 use crate::tls_config_provider_server::ProxyTlsConfigProvider;
 use crate::tls_self_signed_pair_generator::SelfSignedTlsConfigProvider;
@@ -16,6 +16,7 @@ use quinn::crypto::rustls::QuicServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
 use tokio::sync::mpsc::Sender;
+use crate::skip_client_verification::SkipClientVerification;
 
 // note: setting this to "1" did not make a difference!
 // solana server sets this to 256
@@ -214,15 +215,19 @@ fn configure_server()
 
     // ---------------------------------------------
 
+    // .with_safe_default_protocol_versions()
+    //     .unwrap()
+    //     .with_client_cert_verifier(SkipClientVerification::new())
+
         let mut server_crypto = rustls::ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(vec![cert_der], private_key)?;
-        server_crypto.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
+        server_crypto.alpn_protocols = vec![ALPN_TPU_FORWARDPROXY_PROTOCOL_ID.to_vec()];
 
         let mut server_config =
             quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(server_crypto)?));
         let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
-        transport_config.max_concurrent_uni_streams(0_u8.into());
+        // transport_config.max_concurrent_uni_streams(0_u8.into());
 
     // ---------------------------------------------
 
