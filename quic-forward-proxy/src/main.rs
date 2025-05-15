@@ -1,6 +1,5 @@
 use crate::cli::Args;
 use crate::proxy::QuicForwardProxy;
-use crate::tls_self_signed_pair_generator::SelfSignedTlsConfigProvider;
 use anyhow::bail;
 use clap::Parser;
 use dotenv::dotenv;
@@ -19,8 +18,6 @@ pub mod quic_util;
 mod quinn_auto_reconnect;
 mod shared;
 pub mod tls_config_provider_client;
-pub mod tls_config_provider_server;
-pub mod tls_self_signed_pair_generator;
 mod util;
 mod validator_identity;
 mod solana_tls_config;

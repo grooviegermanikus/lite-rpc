@@ -37,7 +37,6 @@ use tokio::time::sleep;
 use tracing_subscriber::EnvFilter;
 
 use solana_lite_rpc_quic_forward_proxy::proxy::QuicForwardProxy;
-use solana_lite_rpc_quic_forward_proxy::tls_self_signed_pair_generator::SelfSignedTlsConfigProvider;
 use solana_lite_rpc_quic_forward_proxy::validator_identity::ValidatorIdentity;
 use solana_lite_rpc_services::quic_connection_utils::QuicConnectionParameters;
 use solana_lite_rpc_services::tpu_utils::quic_proxy_connection_manager::QuicProxyConnectionManager;
