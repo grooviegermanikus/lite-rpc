@@ -1,5 +1,5 @@
 use anyhow::{bail, Context};
-use log::{info, warn};
+use log::{error, info, warn};
 use quinn::{Connection, ConnectionError, Endpoint};
 use std::fmt;
 use std::net::SocketAddr;
@@ -195,10 +195,11 @@ impl AutoReconnect {
             Err(ConnectionError::TimedOut) => None,
             // maybe we should also treat TransportError explicitly
             Err(unexpected_error) => {
-                panic!(
-                    "Connection to {} failed with unexpected error: {}",
+                error!(
+                    "Connection to {} failed with unexpected error: {:#}",
                     self.target_address, unexpected_error
                 );
+                None
             }
         }
     }
