@@ -58,9 +58,7 @@ solana-accounts-db = "~2.2.2"
 solana-address-lookup-table-program = "~2.2.2"
 
 yellowstone-grpc-proto = { git = "https://github.com/rpcpool/yellowstone-grpc.git", tag = "v6.0.0+solana.2.2.12" }
-# TODO
-#geyser-grpc-connector = { git = "https://github.com/blockworks-foundation/geyser-grpc-connector.git", tag = "v0.12.1+yellowstone.3.0.0+solana.2.0" }
-geyser-grpc-connector = { path = "../geyser-grpc-connector" }
+geyser-grpc-connector = { git = "https://github.com/blockworks-foundation/geyser-grpc-connector.git", tag = "v0.13.1+yellowstone.6.0.0+solana.2.2" }
 
 itertools = "0.10.5"
 rangetools = "0.1.4"
