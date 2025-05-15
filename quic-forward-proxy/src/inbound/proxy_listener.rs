@@ -13,7 +13,8 @@ use std::net::{Incoming, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use quinn::crypto::rustls::QuicServerConfig;
-use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
 use tokio::sync::mpsc::Sender;
 
 // note: setting this to "1" did not make a difference!
@@ -73,7 +74,24 @@ impl ProxyListener {
     ) -> Endpoint {
         // let server_tls_config: QuicServerConfig = tls_config.get_server_tls_crypto_config();
 
-        let (mut quinn_server_config, _) = configure_server().unwrap();
+        /*
+
+            let mut server_crypto = rustls::ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(certs, key)?;
+            server_crypto.alpn_protocols = common::ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+            if options.keylog {
+                server_crypto.key_log = Arc::new(rustls::KeyLogFile::new());
+            }
+
+            let mut server_config =
+                quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(server_crypto)?));
+            let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
+            transport_config.max_concurrent_uni_streams(0_u8.into());
+
+         */
+
+        let mut quinn_server_config = configure_server().unwrap();
         // let server_tls_config = QuicServerConfig::try_from(server_config).unwrap();
         // let mut quinn_server_config: quinn::ServerConfig = ServerConfig::with_crypto(Arc::new(server_tls_config));
 
@@ -186,15 +204,32 @@ impl ProxyListener {
 // TODO move
 // from quinn examples
 fn configure_server()
-    -> Result<(ServerConfig, CertificateDer<'static>), Box<dyn Error + Send + Sync + 'static>> {
+    -> Result<ServerConfig, Box<dyn Error + Send + Sync + 'static>> {
     let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
     let cert_der = CertificateDer::from(cert.cert);
-    let priv_key = PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der());
+    // let priv_key = PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der());
 
-    let mut server_config =
-        ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key.into())?;
-    let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
-    transport_config.max_concurrent_uni_streams(0_u8.into());
+    let private_key =  PrivateKeyDer::Pkcs8(cert.key_pair.serialize_der().into());
 
-    Ok((server_config, cert_der))
+
+    // ---------------------------------------------
+
+        let mut server_crypto = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert_der], private_key)?;
+        server_crypto.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
+
+        let mut server_config =
+            quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(server_crypto)?));
+        let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
+        transport_config.max_concurrent_uni_streams(0_u8.into());
+
+    // ---------------------------------------------
+
+    // let mut server_config =
+    //     ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key.into())?;
+    // let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
+    // transport_config.max_concurrent_uni_streams(0_u8.into());
+
+    Ok(server_config)
 }
