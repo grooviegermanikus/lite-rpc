@@ -8,7 +8,6 @@ pub mod proxy_request_format;
 mod quic_util;
 mod quinn_auto_reconnect;
 mod shared;
-pub mod tls_config_provider_client;
 mod util;
 pub mod validator_identity;
 pub mod skip_client_verification;

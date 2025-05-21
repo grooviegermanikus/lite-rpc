@@ -1,14 +1,12 @@
 use rustls::crypto::CryptoProvider;
 use rustls::NamedGroup;
-use solana_sdk::signature::{Keypair, Signer};
 use {
     rustls::{
-        client::WantsClientCert, server::WantsServerCert, ClientConfig, ConfigBuilder, ServerConfig,
+        client::WantsClientCert, ClientConfig, ConfigBuilder,
     },
     std::sync::Arc,
 };
 use crate::skip_server_verification::SkipServerVerification;
-use crate::skip_client_verification::SkipClientVerification;
 
 pub fn tls_client_config_builder() -> ConfigBuilder<ClientConfig, WantsClientCert> {
     ClientConfig::builder_with_provider(Arc::new(crypto_provider()))
@@ -16,13 +14,6 @@ pub fn tls_client_config_builder() -> ConfigBuilder<ClientConfig, WantsClientCer
         .unwrap()
         .dangerous()
         .with_custom_certificate_verifier(SkipServerVerification::new())
-}
-
-pub fn tls_server_config_builder() -> ConfigBuilder<ServerConfig, WantsServerCert> {
-    ServerConfig::builder_with_provider(Arc::new(crypto_provider()))
-        .with_safe_default_protocol_versions()
-        .unwrap()
-        .with_client_cert_verifier(SkipClientVerification::new())
 }
 
 fn crypto_provider() -> CryptoProvider {

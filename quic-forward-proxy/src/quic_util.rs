@@ -28,7 +28,7 @@ pub fn apply_gso_workaround(tc: &mut TransportConfig) {
 
 
 /// note: true means that quinn's heuristic for GSO detection is used to decide if GSO is used
-pub fn disable_gso() -> bool {
+fn disable_gso() -> bool {
     std::env::var("DISABLE_GSO")
         .unwrap_or("false".to_string())
         .parse::<bool>()

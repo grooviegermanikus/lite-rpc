@@ -7,18 +7,12 @@ use {
     },
     std::{fmt::Debug, sync::Arc},
 };
-use rustls::{crypto::CryptoProvider, NamedGroup};
 
 /// Implementation of [`ClientCertVerifier`] that ignores the server
 /// certificate. Yet still checks the TLS signatures.
 #[derive(Debug)]
 pub struct SkipClientVerification(Arc<rustls::crypto::CryptoProvider>);
 
-impl SkipClientVerification {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self(Arc::new(crypto_provider())))
-    }
-}
 impl rustls::server::danger::ClientCertVerifier for SkipClientVerification {
     fn verify_client_cert(
         &self,
@@ -73,13 +67,3 @@ impl rustls::server::danger::ClientCertVerifier for SkipClientVerification {
         self.offer_client_auth()
     }
 }
-
-fn crypto_provider() -> CryptoProvider {
-    let mut provider = rustls::crypto::ring::default_provider();
-    // Disable all key exchange algorithms except X25519
-    provider
-        .kx_groups
-        .retain(|kx| kx.name() == NamedGroup::X25519);
-    provider
-}
-

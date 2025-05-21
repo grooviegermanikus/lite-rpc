@@ -2,7 +2,7 @@ use log::trace;
 use prometheus::{
     core::GenericGauge, histogram_opts, opts, register_histogram, register_int_gauge, Histogram,
 };
-use quinn::{ClientConfig, ClosedStream, Connection, ConnectionError, Endpoint, EndpointConfig, IdleTimeout, SendStream, TokioRuntime, TransportConfig, VarInt, WriteError};
+use quinn::{ClientConfig, Connection, ConnectionError, Endpoint, EndpointConfig, IdleTimeout, SendStream, TokioRuntime, TransportConfig, VarInt, WriteError};
 use serde::{Deserialize, Serialize};
 use solana_lite_rpc_core::network_utils::apply_gso_workaround;
 use solana_sdk::pubkey::Pubkey;
@@ -365,9 +365,6 @@ impl QuicConnectionUtils {
             }
         }
 
-        let timer: prometheus::HistogramTimer = TIME_TO_FINISH.start_timer();
-        // let finish_timeout_res =
-        //     timeout(connection_params.finalize_timeout, send_stream.finish()).await;
         let finish_timeout_res = send_stream.finish();
         match finish_timeout_res {
             Ok(()) => {}
@@ -381,38 +378,6 @@ impl QuicConnectionUtils {
                 return Err(QuicConnectionError::ConnectionError { retry: false });
             }
         }
-
-        // TODO remove unused metrics
-        // match finish_timeout_res {
-        //     Ok(finish_res) => {
-        //         if let Err(e) = finish_res {
-        //             match &e {
-        //                 quinn::WriteError::Stopped(_) => NB_QUIC_WRITE_ERROR_STOPPED.inc(),
-        //                 quinn::WriteError::ConnectionLost(_) => {
-        //                     NB_QUIC_WRITE_ERROR_CONNECTION_LOST.inc()
-        //                 }
-        //                 // quinn::WriteError::UnknownStream => {
-        //                 //     NB_QUIC_WRITE_ERROR_UNKNOWN_STREAM.inc()
-        //                 // }
-        //                 quinn::WriteError::ZeroRttRejected => NB_QUIC_WRITE_ERROR_0RTT_REJECT.inc(),
-        //             };
-        //             trace!(
-        //                 "Error while finishing transaction for {}, error {}",
-        //                 identity,
-        //                 e
-        //             );
-        //             NB_QUIC_FINISH_ERRORED.inc();
-        //             return Err(QuicConnectionError::ConnectionError { retry: false });
-        //         } else {
-        //             timer.observe_duration();
-        //         }
-        //     }
-        //     Err(_) => {
-        //         log::debug!("timeout while finishing transaction for {}", identity);
-        //         NB_QUIC_FINISH_TIMEOUT.inc();
-        //         return Err(QuicConnectionError::TimeOut);
-        //     }
-        // }
 
         Ok(())
     }

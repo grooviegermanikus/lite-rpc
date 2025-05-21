@@ -1,21 +1,18 @@
 use std::error::Error;
 use crate::proxy_request_format::TpuForwardingRequest;
-use crate::quic_util::{connection_stats, ALPN_TPU_FORWARDPROXY_PROTOCOL_ID};
+use crate::quic_util::{apply_gso_workaround, connection_stats, ALPN_TPU_FORWARDPROXY_PROTOCOL_ID};
 use crate::shared::ForwardPacket;
 use crate::util::FALLBACK_TIMEOUT;
 use anyhow::{anyhow, bail, Context};
 use log::{debug, error, info, trace, warn};
 use quinn::{Connecting, Endpoint, ServerConfig, VarInt};
 use solana_sdk::packet::PACKET_DATA_SIZE;
-use std::net::{Incoming, SocketAddr};
+use std::net::{SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use quinn::crypto::rustls::QuicServerConfig;
-use rustls::ConfigBuilder;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::sync::mpsc::Sender;
-use crate::skip_client_verification::SkipClientVerification;
 
 // note: setting this to "1" did not make a difference!
 // solana server sets this to 256
@@ -107,7 +104,7 @@ impl ProxyListener {
         transport_config.stream_receive_window((PACKET_DATA_SIZE as u32).into());
         transport_config
             .receive_window((PACKET_DATA_SIZE as u32 * MAX_CONCURRENT_UNI_STREAMS).into());
-        // apply_gso_workaround(transport_config); // TODO
+        apply_gso_workaround(transport_config); // TODO
 
         Endpoint::server(quinn_server_config, proxy_listener_addr).unwrap()
     }
@@ -211,29 +208,13 @@ fn configure_server()
 
     let private_key =  PrivateKeyDer::Pkcs8(cert.key_pair.serialize_der().into());
 
+    let mut server_crypto = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(vec![cert_der], private_key)?;
+    server_crypto.alpn_protocols = vec![ALPN_TPU_FORWARDPROXY_PROTOCOL_ID.to_vec()];
 
-    // ---------------------------------------------
-
-    // .with_safe_default_protocol_versions()
-    //     .unwrap()
-    //     .with_client_cert_verifier(SkipClientVerification::new())
-
-        let mut server_crypto = rustls::ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(vec![cert_der], private_key)?;
-        server_crypto.alpn_protocols = vec![ALPN_TPU_FORWARDPROXY_PROTOCOL_ID.to_vec()];
-
-        let mut server_config =
-            quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(server_crypto)?));
-        let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
-        // transport_config.max_concurrent_uni_streams(0_u8.into());
-
-    // ---------------------------------------------
-
-    // let mut server_config =
-    //     ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key.into())?;
-    // let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
-    // transport_config.max_concurrent_uni_streams(0_u8.into());
+    let server_config =
+        quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(server_crypto)?));
 
     Ok(server_config)
 }

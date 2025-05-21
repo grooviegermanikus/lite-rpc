@@ -7,7 +7,7 @@ use crate::validator_identity::ValidatorIdentity;
 use anyhow::{bail, Context};
 use futures::future::join_all;
 use log::{debug, info, trace, warn};
-use quinn::{ClientConfig, Endpoint, EndpointConfig, IdleTimeout, ServerConfig, TokioRuntime, TransportConfig, VarInt};
+use quinn::{ClientConfig, Endpoint, EndpointConfig, IdleTimeout, TokioRuntime, TransportConfig, VarInt};
 use solana_sdk::quic::QUIC_MAX_TIMEOUT;
 use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
 use std::collections::HashMap;
@@ -20,6 +20,7 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use solana_tls_utils::new_dummy_x509_certificate;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::RwLock;
+use crate::quic_util::apply_gso_workaround;
 use crate::solana_tls_config::{tls_client_config_builder};
 
 const MAX_PARALLEL_STREAMS: usize = 6;
@@ -313,7 +314,7 @@ fn create_tpu_client_endpoint(
     let timeout = IdleTimeout::try_from(QUIC_MAX_TIMEOUT).unwrap();
     transport_config.max_idle_timeout(Some(timeout));
     transport_config.keep_alive_interval(Some(Duration::from_millis(500)));
-    // apply_gso_workaround(&mut transport_config); // TODO
+    apply_gso_workaround(&mut transport_config); // TODO
 
     let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));
     // let mut config = ServerConfig::with_crypto(Arc::new(config));

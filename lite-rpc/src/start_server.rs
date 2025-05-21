@@ -3,11 +3,8 @@ use crate::{
     rpc_pubsub::LiteRpcPubSubServer,
 };
 
-use hyper::Method;
-use jsonrpsee::server::{RpcServiceBuilder, ServerBuilder};
+use jsonrpsee::server::{ServerBuilder};
 use solana_lite_rpc_core::AnyhowJoinHandle;
-use std::time::Duration;
-use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ServerConfiguration {
