@@ -92,7 +92,7 @@ merge-streams = "0.1.2"
 jemallocator = "0.5.4"
 quinn = "0.11.6"
 quinn-proto = "0.11.9"
-rustls = { version = "0.23.22", features = ["std"], default-features = false }
+rustls = { version = "0.23.22", features = ["ring"], default-features = false }
 tonic = "0.13.1"
 tonic-health = "0.13.1"
 rcgen = "0.13.2"
