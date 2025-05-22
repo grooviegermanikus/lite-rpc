@@ -176,7 +176,6 @@ impl QuicConnectionUtils {
         transport_config.keep_alive_interval(Some(Duration::from_millis(500)));
         transport_config.datagram_receive_buffer_size(Some(DATAGRAM_RECEIVE_BUFFER_SIZE));
         transport_config.datagram_send_buffer_size(DATAGRAM_SEND_BUFFER_SIZE);
-        transport_config.initial_mtu(INITIAL_MAXIMUM_TRANSMISSION_UNIT);
         transport_config.max_concurrent_bidi_streams(VarInt::from(0u8));
         transport_config.max_concurrent_uni_streams(VarInt::from(0u8));
         transport_config.min_mtu(MINIMUM_MAXIMUM_TRANSMISSION_UNIT);

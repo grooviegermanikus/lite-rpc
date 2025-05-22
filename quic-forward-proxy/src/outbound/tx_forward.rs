@@ -8,7 +8,7 @@ use anyhow::{bail, Context};
 use futures::future::join_all;
 use log::{debug, info, trace, warn};
 use quinn::{ClientConfig, Endpoint, EndpointConfig, IdleTimeout, TokioRuntime, TransportConfig, VarInt};
-use solana_sdk::quic::QUIC_MAX_TIMEOUT;
+use solana_sdk::quic::{QUIC_KEEP_ALIVE, QUIC_MAX_TIMEOUT, QUIC_SEND_FAIRNESS};
 use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -279,6 +279,10 @@ fn create_tpu_client_endpoint(
     certificate: CertificateDer<'static>,
     key: PrivateKeyDer<'static>,
 ) -> Endpoint {
+    const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 64 * 1024 * 1024;
+    const DATAGRAM_SEND_BUFFER_SIZE: usize = 64 * 1024 * 1024;
+    const MTU_TPU: u16 = 1280;
+
     let mut endpoint = {
         let client_socket =
             solana_net_utils::bind_in_range(IpAddr::V4(Ipv4Addr::UNSPECIFIED), (8000, 10000))
@@ -293,31 +297,24 @@ fn create_tpu_client_endpoint(
         .with_client_auth_cert(vec![certificate], key)
         .expect("Failed to set QUIC client certificates");
 
-    // let mut crypto = rustls::ClientConfig::builder()
-    //     .with_safe_defaults()
-    //     .with_custom_certificate_verifier(SkipServerVerification::new())
-    //     .with_client_auth_cert(vec![certificate], key)
-    //     .expect("Failed to set QUIC client certificates");
-
     config.enable_early_data = true;
-
     config.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
-
-
-    // let mut config = ClientConfig::new(Arc::new(crypto));
 
     // note: this should be aligned with solana quic server's endpoint config
     let mut transport_config = TransportConfig::default();
-    // no remotely-initiated streams required
     transport_config.max_concurrent_uni_streams(VarInt::from_u32(0));
     transport_config.max_concurrent_bidi_streams(VarInt::from_u32(0));
     let timeout = IdleTimeout::try_from(QUIC_MAX_TIMEOUT).unwrap();
     transport_config.max_idle_timeout(Some(timeout));
-    transport_config.keep_alive_interval(Some(Duration::from_millis(500)));
+    transport_config.keep_alive_interval(Some(QUIC_KEEP_ALIVE));
+    transport_config.datagram_receive_buffer_size(Some(DATAGRAM_RECEIVE_BUFFER_SIZE));
+    transport_config.datagram_send_buffer_size(DATAGRAM_SEND_BUFFER_SIZE);
+    transport_config.min_mtu(MTU_TPU);
+    transport_config.packet_threshold(3); // default, recommended for real-time
+    transport_config.send_fairness(QUIC_SEND_FAIRNESS);
     apply_gso_workaround(&mut transport_config); // TODO
 
     let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));
-    // let mut config = ServerConfig::with_crypto(Arc::new(config));
     config
         .transport_config(Arc::new(transport_config));
         // .migration(false); // TODO
