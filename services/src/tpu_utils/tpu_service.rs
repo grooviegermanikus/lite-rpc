@@ -15,7 +15,10 @@ use solana_lite_rpc_core::types::SlotStream;
 use solana_lite_rpc_core::AnyhowJoinHandle;
 use solana_sdk::{quic::QUIC_PORT_OFFSET, signature::Keypair, slot_history::Slot};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use itertools::Itertools;
+use log::info;
 use solana_tls_utils::new_dummy_x509_certificate;
 
 lazy_static::lazy_static! {
@@ -109,10 +112,11 @@ impl TpuService {
     ) -> anyhow::Result<()> {
         let fanout = self.config.fanout_slots;
         let last_slot = estimated_slot + fanout;
-        let current_slot = current_slot.saturating_sub(4);
+        let current_slot = current_slot.saturating_sub(10);
 
         let cluster_nodes = self.data_cache.cluster_info.cluster_nodes.clone();
 
+        info!("assume leaders from slot {} to {}", current_slot, last_slot);
         let next_leaders = self
             .leader_schedule
             .get_slot_leaders(current_slot, last_slot)
@@ -122,18 +126,19 @@ impl TpuService {
             .iter()
             .map(|x| {
                 let contact_info = cluster_nodes.get(&x.pubkey);
-                let tpu_port = match contact_info {
+                let tpu_addr = match contact_info {
                     Some(info) => info.tpu,
                     _ => None,
                 };
-                (x.pubkey, tpu_port)
+                (x.pubkey, tpu_addr)
             })
-            .filter(|x| x.1.is_some())
-            .map(|x| {
-                let mut addr = x.1.unwrap();
-                // add quic port offset
-                addr.set_port(addr.port() + QUIC_PORT_OFFSET);
-                (x.0, addr)
+            .filter_map(|(pubkey, maybe_addr)| {
+                let tpu_addr = maybe_addr?;
+                Some((pubkey, tpu_addr))
+            })
+            .flat_map(|(pubkey, addr)| {
+                let tpu_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET);
+                vec![(pubkey, tpu_addr)]
             })
             .collect();
 
