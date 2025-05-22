@@ -16,6 +16,7 @@ use solana_lite_rpc_core::AnyhowJoinHandle;
 use solana_sdk::{quic::QUIC_PORT_OFFSET, signature::Keypair, slot_history::Slot};
 use solana_streamer::tls_certificates::new_dummy_x509_certificate;
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 lazy_static::lazy_static! {
@@ -122,18 +123,22 @@ impl TpuService {
             .iter()
             .map(|x| {
                 let contact_info = cluster_nodes.get(&x.pubkey);
-                let tpu_port = match contact_info {
+                let tpu_addr = match contact_info {
                     Some(info) => info.tpu,
                     _ => None,
                 };
-                (x.pubkey, tpu_port)
+                (x.pubkey, tpu_addr)
             })
-            .filter(|x| x.1.is_some())
-            .map(|x| {
-                let mut addr = x.1.unwrap();
-                // add quic port offset
-                addr.set_port(addr.port() + QUIC_PORT_OFFSET);
-                (x.0, addr)
+            .filter_map(|(pubkey, maybe_addr)| {
+                let tpu_addr = maybe_addr?;
+                Some((pubkey, tpu_addr))
+            })
+            .flat_map(|(pubkey, addr)| {
+                // fwd_diff: {1: 5174, 8: 3, 3: 5, 10: 3, 7: 3, 9: 4, 16: 405, 6: 6, 5: 1, 4: 8, 0: 89, 2: 3}
+                let tpu_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET);
+                // let tpu_fwd1_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET + 1);
+                // let tpu_fwd16_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET + 16);
+                vec![(pubkey, tpu_addr)]
             })
             .collect();
 
