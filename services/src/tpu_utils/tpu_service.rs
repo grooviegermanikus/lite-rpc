@@ -137,7 +137,10 @@ impl TpuService {
                 Some((pubkey, tpu_addr))
             })
             .flat_map(|(pubkey, addr)| {
+                // fwd_diff: {1: 5174, 8: 3, 3: 5, 10: 3, 7: 3, 9: 4, 16: 405, 6: 6, 5: 1, 4: 8, 0: 89, 2: 3}
                 let tpu_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET);
+                // let tpu_fwd1_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET + 1);
+                // let tpu_fwd16_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET + 16);
                 vec![(pubkey, tpu_addr)]
             })
             .collect();
