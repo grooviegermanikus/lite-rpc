@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
 use tracing::debug;
-
+use crate::util::FALLBACK_TIMEOUT;
 // connection manager with automatic reconnect; designated for connection to Solana TPU nodes
 //
 // assumptions:
@@ -184,6 +184,7 @@ impl AutoReconnect {
         }
     }
 
+
     async fn create_connection(&self) -> Option<Connection> {
         let connection = self
             .endpoint
@@ -198,6 +199,27 @@ impl AutoReconnect {
                 error!(
                     "Connection to {} failed with unexpected error: {:#}",
                     self.target_address, unexpected_error
+                );
+                None
+            }
+        }
+    }
+
+
+    async fn create_connection_0rtt(&self) -> Option<Connection> {
+
+        let connection =
+            make_connection_0rtt(
+            &self.endpoint,
+            self.target_address,
+            FALLBACK_TIMEOUT);
+
+        match connection.await {
+            Ok(conn) => Some(conn),
+            Err(error) => {
+                error!(
+                    "Failed to create quic connecton to {} with error: {:#}",
+                    self.target_address, error
                 );
                 None
             }
@@ -248,3 +270,29 @@ impl fmt::Display for AutoReconnect {
         write!(f, "Connection to {}", self.target_address,)
     }
 }
+
+async fn make_connection_0rtt(
+    endpoint: &Endpoint,
+    addr: SocketAddr,
+    connection_timeout: Duration,
+) -> anyhow::Result<Connection> {
+    let connecting = endpoint.connect(addr, "connect")?;
+    let connection = match connecting.into_0rtt() {
+        Ok((connection, zero_rtt)) => {
+            if (timeout(connection_timeout, zero_rtt).await).is_ok() {
+                connection
+            } else {
+                return Err(ConnectionError::TimedOut.into());
+            }
+        }
+        Err(connecting) => {
+            if let Ok(connecting_result) = timeout(connection_timeout, connecting).await {
+                connecting_result?
+            } else {
+                return Err(ConnectionError::TimedOut.into());
+            }
+        }
+    };
+    Ok(connection)
+}
+
