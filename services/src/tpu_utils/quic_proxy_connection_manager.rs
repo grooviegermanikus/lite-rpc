@@ -135,6 +135,7 @@ impl QuicProxyConnectionManager {
 
         config.enable_early_data = true;
         config.alpn_protocols = vec![ALPN_TPU_FORWARDPROXY_PROTOCOL_ID.to_vec()];
+        let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));
 
 
         // note: this config must be aligned with quic-proxy's server config
@@ -146,8 +147,6 @@ impl QuicProxyConnectionManager {
         transport_config.max_idle_timeout(Some(timeout));
         transport_config.keep_alive_interval(Some(Duration::from_millis(500)));
         apply_gso_workaround(&mut transport_config);
-
-        let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));
 
         config.transport_config(Arc::new(transport_config));
         endpoint.set_default_client_config(config);
