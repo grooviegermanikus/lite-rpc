@@ -19,7 +19,7 @@ solana-streamer = { workspace = true }
 solana-tls-utils = { workspace = true }
 solana-transaction-status = { workspace = true }
 solana-net-utils = { workspace = true }
-rustls = { workspace = true, features = ["ring"]}
+rustls = { workspace = true, features = ["std"]}
 serde = { workspace = true }
 serde_json = { workspace = true }
 bincode = { workspace = true }
@@ -41,7 +41,7 @@ async-channel = { workspace = true }
 quinn = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-tokio = { version = "1.43.0", features = ["full", "fs"]}
+tokio = { version = "1.45.0", features = ["full", "fs"]}
 futures = { workspace = true }
 rcgen = { workspace = true}
 spl-memo = "3.0.1"

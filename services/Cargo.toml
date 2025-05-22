@@ -38,7 +38,7 @@ lazy_static = { workspace = true }
 async-channel = { workspace = true }
 quinn = { workspace = true }
 chrono = { workspace = true }
-rustls = { workspace = true, features = ["ring"]}
+rustls = { workspace = true, features = ["std"]}
 solana-lite-rpc-core = { workspace = true }
 solana-lite-rpc-util = { workspace = true }
 

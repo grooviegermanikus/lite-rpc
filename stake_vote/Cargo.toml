@@ -34,6 +34,6 @@ solana-lite-rpc-core = { workspace = true }
 solana-lite-rpc-util = { workspace = true }
 
 futures = { version = "0.3.28", default-features = false }
-tokio = { version = "1.43.0", features = ["full"]}
+tokio = { version = "1.45.0", features = ["full"]}
 futures-util = "0.3.28"
 

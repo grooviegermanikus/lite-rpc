@@ -14,7 +14,7 @@ solana-rpc-client = { workspace = true }
 
 dashmap = {workspace = true}
 async-trait = { workspace = true }
-tokio = { version = "1.43.0", features = ["full", "fs"]}
+tokio = { version = "1.45.0", features = ["full", "fs"]}
 tokio-util = "0.7"
 
 solana-lite-rpc-core = {workspace = true}

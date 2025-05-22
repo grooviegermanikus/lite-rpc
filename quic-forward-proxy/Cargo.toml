@@ -23,7 +23,7 @@ itertools = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 dotenv = { workspace = true }
-rustls = { version = "0.23.27", default-features = false, features = ["ring"] }
+rustls = { version = "0.23.22", features = ["std"], default-features = false }
 quinn = "0.11.8"
 quinn-proto = "0.11.12"
 futures = { workspace = true }

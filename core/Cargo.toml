@@ -32,7 +32,7 @@ log = { workspace = true }
 dashmap = { workspace = true }
 quinn = { workspace = true }
 chrono = { workspace = true }
-rustls = { workspace = true, features = ["ring"]}
+rustls = { workspace = true, features = ["std"]}
 async-trait = { workspace = true }
 itertools = { workspace = true }
 prometheus = { workspace = true }

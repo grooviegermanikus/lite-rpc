@@ -25,7 +25,6 @@ tracing = { workspace = true }
 dashmap = { workspace = true }
 quinn = { workspace = true }
 chrono = { workspace = true }
-rustls = { workspace = true, features = ["ring"]}
 async-trait = { workspace = true }
 derive_more = "0.99.17"
 async-channel = { workspace = true }
