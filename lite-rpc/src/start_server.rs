@@ -2,9 +2,13 @@ use crate::{
     bridge::LiteBridge, bridge_pubsub::LitePubSubBridge, rpc::LiteRpcServer,
     rpc_pubsub::LiteRpcPubSubServer,
 };
+use http::Method;
+use std::net::SocketAddr;
+use std::time::Duration;
 
-use jsonrpsee::server::{ServerBuilder};
+use jsonrpsee::server::{RpcServiceBuilder, Server, ServerBuilder};
 use solana_lite_rpc_core::AnyhowJoinHandle;
+use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ServerConfiguration {
@@ -47,19 +51,19 @@ pub async fn start_servers(
         .await?
         .start(pubsub);
 
-    // TODO check if we need that
-    // let cors = CorsLayer::new()
-    //     .max_age(Duration::from_secs(86400))
-    //     // Allow `POST` when accessing the resource
-    //     .allow_methods([Method::POST, Method::GET, Method::OPTIONS])
-    //     // Allow requests from any origin
-    //     .allow_origin(Any)
-    //     .allow_headers(Any);
+    let cors = CorsLayer::new()
+        .max_age(Duration::from_secs(86400))
+        // Allow `POST` when accessing the resource
+        .allow_methods([Method::POST, Method::GET, Method::OPTIONS])
+        // Allow requests from any origin
+        .allow_origin(Any)
+        .allow_headers(Any);
 
-    // let middleware = RpcServiceBuilder::new().layer(cors);
+    // note: this requires older version of tower
+    let middleware = tower::ServiceBuilder::new().layer(cors);
 
-    let http_server_handle = ServerBuilder::default()
-        // .set_rpc_middleware(middleware)
+    let http_server_handle = Server::builder()
+        .set_http_middleware(middleware)
         .max_connections(server_configuration.max_connection)
         .max_request_body_size(server_configuration.max_response_body_size)
         .max_response_body_size(server_configuration.max_response_body_size)
