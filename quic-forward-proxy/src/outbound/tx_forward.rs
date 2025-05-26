@@ -282,13 +282,17 @@ fn create_tpu_client_endpoint(
     const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 64 * 1024 * 1024;
     const DATAGRAM_SEND_BUFFER_SIZE: usize = 64 * 1024 * 1024;
     const MTU_TPU: u16 = 1280;
+    const MINIMUM_MAXIMUM_TRANSMISSION_UNIT: u16 = 1280;
 
     let mut endpoint = {
         let client_socket =
             solana_net_utils::bind_in_range(IpAddr::V4(Ipv4Addr::UNSPECIFIED), (8000, 10000))
                 .expect("create_endpoint bind_in_range")
                 .1;
-        let config = EndpointConfig::default();
+        let mut config = EndpointConfig::default();
+        config
+            .max_udp_payload_size(MINIMUM_MAXIMUM_TRANSMISSION_UNIT)
+            .expect("Should set max MTU");
         quinn::Endpoint::new(config, None, client_socket, Arc::new(TokioRuntime))
             .expect("create_endpoint quinn::Endpoint::new")
     };
@@ -310,14 +314,11 @@ fn create_tpu_client_endpoint(
     transport_config.datagram_receive_buffer_size(Some(DATAGRAM_RECEIVE_BUFFER_SIZE));
     transport_config.datagram_send_buffer_size(DATAGRAM_SEND_BUFFER_SIZE);
     transport_config.min_mtu(MTU_TPU);
-    transport_config.packet_threshold(3); // default, recommended for real-time
-    transport_config.send_fairness(QUIC_SEND_FAIRNESS);
-    apply_gso_workaround(&mut transport_config); // TODO
+    apply_gso_workaround(&mut transport_config);
 
     let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));
     config
         .transport_config(Arc::new(transport_config));
-        // .migration(false); // TODO
     endpoint.set_default_client_config(config);
 
     endpoint

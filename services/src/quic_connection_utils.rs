@@ -160,11 +160,6 @@ impl QuicConnectionUtils {
             .with_custom_certificate_verifier(SkipServerVerification::new())
             .with_client_auth_cert(vec![certificate], key).unwrap();
 
-        // let mut crypto = rustls::ClientConfig::builder()
-        //     .with_safe_defaults()
-        //     .with_custom_certificate_verifier(Arc::new(SkipServerVerification {}))
-        //     .with_client_auth_cert(vec![certificate], key)
-        //     .unwrap();
         config.enable_early_data = true;
         config.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
 
