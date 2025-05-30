@@ -1,4 +1,4 @@
-use log::{debug, warn};
+use log::{debug, info, warn};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_lite_rpc_core::AnyhowJoinHandle;
 use solana_rpc_client_api::response::{RpcContactInfo, RpcVoteAccountStatus};
@@ -9,9 +9,11 @@ pub fn poll_cluster_info(
     rpc_client: Arc<RpcClient>,
     contact_info_sender: Sender<Vec<RpcContactInfo>>,
 ) -> AnyhowJoinHandle {
+    info!("Starting RPC cluster info polling");
     // task MUST not terminate but might be aborted from outside
     tokio::spawn(async move {
         loop {
+            info!("Polling RPC cluster info");
             match rpc_client.get_cluster_nodes().await {
                 Ok(cluster_nodes) => {
                     if let Err(e) = contact_info_sender.send(cluster_nodes) {

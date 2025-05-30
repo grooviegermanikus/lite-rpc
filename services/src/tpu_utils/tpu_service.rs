@@ -116,7 +116,6 @@ impl TpuService {
 
         let cluster_nodes = self.data_cache.cluster_info.cluster_nodes.clone();
 
-        info!("assume leaders from slot {} to {}", current_slot, last_slot);
         let next_leaders = self
             .leader_schedule
             .get_slot_leaders(current_slot, last_slot)
@@ -141,6 +140,7 @@ impl TpuService {
                 let tpu_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET);
                 // let tpu_fwd1_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET + 1);
                 // let tpu_fwd16_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET + 16);
+                // vec![(pubkey, tpu_addr), (pubkey, tpu_fwd1_addr), (pubkey, tpu_fwd16_addr)]
                 vec![(pubkey, tpu_addr)]
             })
             .collect();

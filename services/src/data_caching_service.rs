@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::{bail, Context};
-use log::warn;
+use log::{info, warn};
 use prometheus::core::GenericGauge;
 use prometheus::{opts, register_int_counter, register_int_gauge, IntCounter};
 use solana_lite_rpc_core::stores::{
