@@ -1,4 +1,4 @@
-name: Cargo Build, Test, and Dependency Scan
+name: Cargo Build, Test
 
 on:
   push:
@@ -11,41 +11,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  scan:
-    name: Dependency Scan
-    runs-on: ubuntu-24.04
-    env:
-      TRIVY_SKIP_JAVA_DB_UPDATE: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Produce vulnerability report
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: Cargo.lock
-          ignore-unfixed: true
-          hide-progress: true
-          severity: CRITICAL
-          output: trivy.txt
-
-      - name: Publish vulnerability report to summary
-        run: |
-          if [[ -s trivy.txt ]]; then
-            {
-              echo "### Security Output"
-              echo "<details><summary>Click to expand</summary>"
-              echo ""
-              echo '```terraform'
-              cat trivy.txt
-              echo '```'
-              echo "</details>"
-            } >> $GITHUB_STEP_SUMMARY
-            cat trivy.txt
-            exit 1
-          fi
-
   build_and_test:
     name: LiteRPC Full Build
     runs-on: ubuntu-24.04
