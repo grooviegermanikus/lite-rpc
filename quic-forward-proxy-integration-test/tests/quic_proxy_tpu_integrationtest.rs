@@ -22,11 +22,11 @@ use std::collections::{HashMap, HashSet};
 use std::net::{SocketAddr, UdpSocket};
 
 use itertools::Itertools;
-use std::str::FromStr;
+use std::str::{FromStr, Matches};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use solana_streamer::quic::{QuicServerParams, StreamerStats};
 use solana_tls_utils::new_dummy_x509_certificate;
 use tokio::runtime::Builder;
@@ -40,6 +40,7 @@ use solana_lite_rpc_quic_forward_proxy::validator_identity::ValidatorIdentity;
 use solana_lite_rpc_services::quic_connection_utils::QuicConnectionParameters;
 use solana_lite_rpc_services::tpu_utils::quic_proxy_connection_manager::QuicProxyConnectionManager;
 use tracing_subscriber::fmt::format::FmtSpan;
+use regex::{Captures, Regex};
 
 #[derive(Copy, Clone, Debug)]
 struct TestCaseParams {
@@ -305,8 +306,9 @@ fn wireup_and_send_txs_via_channel(test_case_params: TestCaseParams) {
                     "read transaction from quic streaming server: {:?}",
                     tx.get_signature()
                 );
-                // "hi 7292   "
+                // "hi 7292 @1748886442000"
                 let content = String::from_utf8(tx.message.instructions()[0].data.clone()).unwrap();
+                info!("- got content: {}", content);
                 contents.insert(content);
 
                 count_map.insert_or_increment(*tx.get_signature());
@@ -337,6 +339,7 @@ fn wireup_and_send_txs_via_channel(test_case_params: TestCaseParams) {
         let all_numbers: HashSet<u64> = contents
             .iter()
             .map(|content| parse_hi(content).unwrap())
+            .map(|(counter, _)| counter)
             .sorted()
             .collect();
         let max_number = *all_numbers.iter().max().unwrap();
@@ -512,8 +515,6 @@ async fn start_literpc_client_direct_mode(
         total_stakes: 100,
     };
 
-    // solana_streamer::nonblocking::quic: Peer type: Staked, stake 30, total stake 0, max streams 128 receive_window Ok(12320) from peer 127.0.0.1:8000
-
     tpu_connection_manager
         .update_connections(
             broadcast_sender.clone(),
@@ -608,19 +609,6 @@ async fn start_literpc_client_proxy_mode(
         max_stakes: 40,
         total_stakes: 100,
     };
-
-    // solana_streamer::nonblocking::quic: Peer type: Staked, stake 30, total stake 0, max streams 128 receive_window Ok(12320) from peer 127.0.0.1:8000
-    //
-    // tpu_connection_manager
-    //     .update_connections(
-    //         broadcast_sender.clone(),
-    //         connections_to_keep,
-    //         identity_stakes,
-    //         // note: tx_store is useless in this scenario as it is never changed; it's only used to check for duplicates
-    //         empty_tx_store().clone(),
-    //         QUIC_CONNECTION_PARAMS,
-    //     )
-    //     .await;
 
     let transaction_receiver = broadcast_sender.subscribe();
     quic_proxy_connection_manager
@@ -756,15 +744,20 @@ pub fn build_raw_sample_tx(i: u32) -> SentTransactionInfo {
 }
 
 // "hi 1234 " -> 1234
-fn parse_hi(input: &str) -> Option<u64> {
-    let input = input.trim();
-    let input = input.replace("hi ", "");
-    input.parse::<u64>().ok()
+fn parse_hi(input: &str) -> Option<(u64, u64)> {
+    let re = Regex::new(r"hi (\d+) @(\d+)").unwrap();
+    let groups: Captures = re.captures(&input).unwrap();
+    let counter = groups.get(1).unwrap().as_str().parse::<u64>().ok()?;
+    let epoch_us = groups.get(2).unwrap().as_str().parse::<u64>().ok()?;
+    Some((counter, epoch_us))
 }
 
 fn build_sample_tx(payer_keypair: &Keypair, i: u32) -> VersionedTransaction {
     let blockhash = Hash::default();
-    create_memo_tx(format!("hi {}", i).as_bytes(), payer_keypair, blockhash).into()
+    let epoch_us = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap()
+        .as_secs_f32() * 1_000_000.0;
+    let epoch_us = epoch_us as u64;
+    create_memo_tx(format!("hi {} @{}", i, epoch_us).as_bytes(), payer_keypair, blockhash).into()
 }
 
 fn create_memo_tx(msg: &[u8], payer: &Keypair, blockhash: Hash) -> Transaction {
@@ -773,4 +766,12 @@ fn create_memo_tx(msg: &[u8], payer: &Keypair, blockhash: Hash) -> Transaction {
     let instruction = Instruction::new_with_bytes(memo, msg, vec![]);
     let message = Message::new(&[instruction], Some(&payer.pubkey()));
     Transaction::new(&[payer], message, blockhash)
+}
+
+#[test]
+fn test_parse_tx_memo() {
+    let input = "hi 1234 @1748886442000";
+    let (counter, epoch_us) = parse_hi(input).unwrap();
+    assert_eq!(counter, 1234);
+    assert_eq!(epoch_us, 1748886442000);
 }

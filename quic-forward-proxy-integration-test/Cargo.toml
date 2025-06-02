@@ -44,6 +44,7 @@ tokio = { version = "1.45.0", features = ["full", "fs"]}
 futures = { workspace = true }
 rcgen = { workspace = true}
 spl-memo = "3.0.1"
+regex = "1.11.1"
 
 [dev-dependencies]
 crossbeam-channel = "0.5.6"
