@@ -67,6 +67,7 @@ use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
+use tonic::transport::ClientTlsConfig;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::EnvFilter;
 
@@ -151,13 +152,15 @@ pub async fn start_lite_rpc(args: Config, rpc_client: Arc<RpcClient>) -> anyhow:
         receive_timeout: Duration::from_secs(15),
     };
 
+    let tls_config = ClientTlsConfig::new().with_native_roots();
+
     let gprc_sources = grpc_sources
         .iter()
         .map(|s| {
             GrpcSourceConfig::new_compressed(
                 s.addr.clone(),
                 s.x_token.clone(),
-                None,
+                Some(tls_config.clone()),
                 timeouts.clone(),
             )
         })
@@ -173,7 +176,7 @@ pub async fn start_lite_rpc(args: Config, rpc_client: Arc<RpcClient>) -> anyhow:
                     GrpcSourceConfig::new_compressed(
                         s.addr.clone(),
                         s.x_token.clone(),
-                        None,
+                        Some(tls_config.clone()),
                         timeouts.clone(),
                     )
                 })
