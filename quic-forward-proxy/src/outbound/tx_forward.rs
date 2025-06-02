@@ -8,7 +8,7 @@ use anyhow::{bail, Context};
 use futures::future::join_all;
 use log::{debug, info, trace, warn};
 use quinn::{ClientConfig, Endpoint, EndpointConfig, IdleTimeout, TokioRuntime, TransportConfig, VarInt};
-use solana_sdk::quic::{QUIC_KEEP_ALIVE, QUIC_MAX_TIMEOUT};
+use solana_sdk::quic::{QUIC_KEEP_ALIVE, QUIC_MAX_TIMEOUT, QUIC_SEND_FAIRNESS};
 use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -314,6 +314,7 @@ fn create_tpu_client_endpoint(
     transport_config.datagram_receive_buffer_size(Some(DATAGRAM_RECEIVE_BUFFER_SIZE));
     transport_config.datagram_send_buffer_size(DATAGRAM_SEND_BUFFER_SIZE);
     transport_config.min_mtu(MTU_TPU);
+    transport_config.send_fairness(QUIC_SEND_FAIRNESS);
     apply_gso_workaround(&mut transport_config);
 
     let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));

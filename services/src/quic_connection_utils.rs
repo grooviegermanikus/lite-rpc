@@ -13,6 +13,7 @@ use std::{
 };
 use quinn::crypto::rustls::QuicClientConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use solana_sdk::quic::QUIC_SEND_FAIRNESS;
 use solana_tls_utils::SkipServerVerification;
 use tokio::{sync::broadcast, time::timeout};
 
@@ -173,6 +174,7 @@ impl QuicConnectionUtils {
         transport_config.max_concurrent_bidi_streams(VarInt::from(0u8));
         transport_config.max_concurrent_uni_streams(VarInt::from(0u8));
         transport_config.min_mtu(MINIMUM_MAXIMUM_TRANSMISSION_UNIT);
+        transport_config.send_fairness(QUIC_SEND_FAIRNESS);
         transport_config.mtu_discovery_config(None);
         apply_gso_workaround(&mut transport_config);
         let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));
