@@ -287,6 +287,7 @@ fn wireup_and_send_txs_via_channel(test_case_params: TestCaseParams) {
             latest_tx = Instant::now();
 
             if packet_count == 0 {
+                // will be dominated by "coalesce" time
                 info!(
                     "time to first packet {}ms",
                     time_to_first.elapsed().as_millis()
@@ -299,6 +300,7 @@ fn wireup_and_send_txs_via_channel(test_case_params: TestCaseParams) {
             }
 
             for packet in packet_batch.iter() {
+                let received_at = get_epoch_now_us();
                 let tx = packet
                     .deserialize_slice::<VersionedTransaction, _>(..)
                     .unwrap();
@@ -308,7 +310,8 @@ fn wireup_and_send_txs_via_channel(test_case_params: TestCaseParams) {
                 );
                 // "hi 7292 @1748886442000"
                 let content = String::from_utf8(tx.message.instructions()[0].data.clone()).unwrap();
-                info!("- got content: {}", content);
+                let (_counter, epoch_us) = parse_hi(&content).unwrap();
+                info!("- got tx sent {} ago", received_at - epoch_us);
                 contents.insert(content);
 
                 count_map.insert_or_increment(*tx.get_signature());
@@ -371,6 +374,13 @@ fn wireup_and_send_txs_via_channel(test_case_params: TestCaseParams) {
     });
 
     packet_consumer_jh.join().unwrap();
+}
+
+fn get_epoch_now_us() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as u64
 }
 
 fn configure_panic_hook() {
@@ -441,7 +451,7 @@ async fn solana_quic_streamer_start() {
                 max_streams_per_ms: 9999,
                 max_connections_per_ipaddr_per_min: 10,
                 wait_for_chunk_timeout: Duration::from_millis(1000),
-                coalesce: Duration::from_millis(1000),
+                coalesce: Duration::from_millis(1),
                 coalesce_channel_size: 1000,
             }
         )
@@ -702,8 +712,8 @@ impl SolanaQuicStreamer {
                     max_unstaked_connections: 10,
                     max_streams_per_ms: 9999,
                     max_connections_per_ipaddr_per_min: 10,
-                    wait_for_chunk_timeout: Duration::from_millis(1000),
-                    coalesce: Duration::from_millis(1000),
+                    wait_for_chunk_timeout: Duration::from_millis(8000),
+                    coalesce: Duration::from_millis(3), 
                     coalesce_channel_size: 1000,
                 },
             )
@@ -754,8 +764,7 @@ fn parse_hi(input: &str) -> Option<(u64, u64)> {
 
 fn build_sample_tx(payer_keypair: &Keypair, i: u32) -> VersionedTransaction {
     let blockhash = Hash::default();
-    let epoch_us = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap()
-        .as_secs_f32() * 1_000_000.0;
+    let epoch_us = get_epoch_now_us();
     let epoch_us = epoch_us as u64;
     create_memo_tx(format!("hi {} @{}", i, epoch_us).as_bytes(), payer_keypair, blockhash).into()
 }
