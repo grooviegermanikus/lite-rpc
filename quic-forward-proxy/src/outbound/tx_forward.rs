@@ -8,7 +8,7 @@ use anyhow::{bail, Context};
 use futures::future::join_all;
 use log::{debug, info, trace, warn};
 use quinn::{ClientConfig, Endpoint, EndpointConfig, IdleTimeout, TokioRuntime, TransportConfig, VarInt};
-use solana_sdk::quic::{QUIC_KEEP_ALIVE, QUIC_MAX_TIMEOUT, QUIC_SEND_FAIRNESS};
+use solana_sdk::quic::{QUIC_KEEP_ALIVE, QUIC_MAX_TIMEOUT};
 use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};

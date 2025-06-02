@@ -39,7 +39,6 @@ pub async fn main() -> anyhow::Result<()> {
             .map(|key_file| Keypair::read_from_file(key_file).unwrap())
     );
 
-    // let tls_config = Arc::new(SelfSignedTlsConfigProvider::new_singleton_self_signed_localhost());
     let main_services = QuicForwardProxy::new(proxy_listener_addr, validator_identity)
         .await?
         .start_services();

@@ -139,7 +139,6 @@ impl QuicConnectionUtils {
     pub fn create_endpoint(certificate: CertificateDer<'static>, key: PrivateKeyDer<'static>,) -> Endpoint {
         const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 64 * 1024 * 1024;
         const DATAGRAM_SEND_BUFFER_SIZE: usize = 64 * 1024 * 1024;
-        const INITIAL_MAXIMUM_TRANSMISSION_UNIT: u16 = MINIMUM_MAXIMUM_TRANSMISSION_UNIT;
         const MINIMUM_MAXIMUM_TRANSMISSION_UNIT: u16 = 1280;
 
         let mut endpoint = {

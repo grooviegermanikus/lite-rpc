@@ -17,8 +17,6 @@ use solana_sdk::{quic::QUIC_PORT_OFFSET, signature::Keypair, slot_history::Slot}
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use itertools::Itertools;
-use log::info;
 use solana_tls_utils::new_dummy_x509_certificate;
 
 lazy_static::lazy_static! {

@@ -3,10 +3,9 @@ use crate::{
     rpc_pubsub::LiteRpcPubSubServer,
 };
 use http::Method;
-use std::net::SocketAddr;
 use std::time::Duration;
 
-use jsonrpsee::server::{RpcServiceBuilder, Server, ServerBuilder};
+use jsonrpsee::server::{Server, ServerBuilder};
 use solana_lite_rpc_core::AnyhowJoinHandle;
 use tower_http::cors::{Any, CorsLayer};
 

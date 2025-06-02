@@ -17,7 +17,6 @@ use solana_sdk::signature::{Keypair, Signature, Signer};
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
 use solana_streamer::nonblocking::quic::{ConnectionPeerType, SpawnNonBlockingServerResult};
 use solana_streamer::packet::PacketBatch;
-// use solana_streamer::quic::StreamStats;
 use solana_streamer::streamer::StakedNodes;
 use std::collections::{HashMap, HashSet};
 use std::net::{SocketAddr, UdpSocket};
@@ -442,12 +441,6 @@ async fn solana_quic_streamer_start() {
                 coalesce: Duration::from_millis(1000),
                 coalesce_channel_size: 1000,
             }
-            // 10,
-            // 10,
-            // 9999, // max_streams_per_ms
-            // 10,
-            // Duration::from_millis(1000),
-            // Duration::from_millis(1000),
         )
         .unwrap();
 
@@ -714,7 +707,6 @@ impl SolanaQuicStreamer {
                 &keypair,
                 sender,
                 exit.clone(),
-                // MAX_QUIC_CONNECTIONS_PER_PEER,
                 staked_nodes,
                 QuicServerParams {
                     max_connections_per_peer: MAX_QUIC_CONNECTIONS_PER_PEER,
