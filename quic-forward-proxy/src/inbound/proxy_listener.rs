@@ -1,17 +1,17 @@
+use std::error::Error;
 use crate::proxy_request_format::TpuForwardingRequest;
-use crate::quic_util::connection_stats;
+use crate::quic_util::{apply_gso_workaround, connection_stats, ALPN_TPU_FORWARDPROXY_PROTOCOL_ID};
 use crate::shared::ForwardPacket;
-use crate::tls_config_provider_server::ProxyTlsConfigProvider;
-use crate::tls_self_signed_pair_generator::SelfSignedTlsConfigProvider;
 use crate::util::FALLBACK_TIMEOUT;
 use anyhow::{anyhow, bail, Context};
 use log::{debug, error, info, trace, warn};
 use quinn::{Connecting, Endpoint, ServerConfig, VarInt};
-use solana_lite_rpc_core::network_utils::apply_gso_workaround;
 use solana_sdk::packet::PACKET_DATA_SIZE;
-use std::net::SocketAddr;
+use std::net::{SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
+use quinn::crypto::rustls::QuicServerConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::sync::mpsc::Sender;
 
 // note: setting this to "1" did not make a difference!
@@ -19,18 +19,15 @@ use tokio::sync::mpsc::Sender;
 const MAX_CONCURRENT_UNI_STREAMS: u32 = 24;
 
 pub struct ProxyListener {
-    tls_config: Arc<SelfSignedTlsConfigProvider>,
     proxy_listener_addr: SocketAddr,
 }
 
 impl ProxyListener {
     pub fn new(
         proxy_listener_addr: SocketAddr,
-        tls_config: Arc<SelfSignedTlsConfigProvider>,
     ) -> Self {
         Self {
             proxy_listener_addr,
-            tls_config,
         }
     }
 
@@ -41,10 +38,12 @@ impl ProxyListener {
         );
 
         let endpoint =
-            Self::new_proxy_listen_server_endpoint(&self.tls_config, self.proxy_listener_addr)
+            Self::new_proxy_listen_server_endpoint(self.proxy_listener_addr)
                 .await;
 
-        while let Some(connecting) = endpoint.accept().await {
+        while let Some(incoming) = endpoint.accept().await {
+            let _remote_addr: SocketAddr = incoming.remote_address();
+            let connecting = incoming.accept().unwrap(); // TODO unwrap
             let forwarder_channel_copy = forwarder_channel.clone();
             tokio::spawn(async move {
                 match Self::handle_client_connection(connecting, forwarder_channel_copy).await {
@@ -64,12 +63,13 @@ impl ProxyListener {
         bail!("TPU Quic Proxy server stopped");
     }
 
+
+
     async fn new_proxy_listen_server_endpoint(
-        tls_config: &SelfSignedTlsConfigProvider,
+        // tls_config: &SelfSignedTlsConfigProvider,
         proxy_listener_addr: SocketAddr,
     ) -> Endpoint {
-        let server_tls_config = tls_config.get_server_tls_crypto_config();
-        let mut quinn_server_config = ServerConfig::with_crypto(Arc::new(server_tls_config));
+        let mut quinn_server_config = create_quic_server_config().unwrap();
 
         // note: this config must be aligned with lite-rpc's client config
         let transport_config = Arc::get_mut(&mut quinn_server_config.transport).unwrap();
@@ -82,17 +82,17 @@ impl ProxyListener {
         transport_config.stream_receive_window((PACKET_DATA_SIZE as u32).into());
         transport_config
             .receive_window((PACKET_DATA_SIZE as u32 * MAX_CONCURRENT_UNI_STREAMS).into());
-        apply_gso_workaround(transport_config);
+        apply_gso_workaround(transport_config); // TODO
 
         Endpoint::server(quinn_server_config, proxy_listener_addr).unwrap()
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     async fn handle_client_connection(
-        client_conn_handshake: Connecting,
+        connecting: Connecting,
         forwarder_channel: Sender<ForwardPacket>,
     ) -> anyhow::Result<()> {
-        let client_connection = client_conn_handshake.await.context("handshake")?;
+        let client_connection = connecting.await.context("handshake")?;
 
         debug!(
             "inbound connection established, client {}",
@@ -173,4 +173,23 @@ impl ProxyListener {
             }; // -- result
         } // -- loop
     }
+}
+
+
+fn create_quic_server_config()
+    -> Result<ServerConfig, Box<dyn Error + Send + Sync + 'static>> {
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+    let cert_der = CertificateDer::from(cert.cert);
+
+    let private_key =  PrivateKeyDer::Pkcs8(cert.key_pair.serialize_der().into());
+
+    let mut server_crypto = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(vec![cert_der], private_key)?;
+    server_crypto.alpn_protocols = vec![ALPN_TPU_FORWARDPROXY_PROTOCOL_ID.to_vec()];
+
+    let server_config =
+        quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(server_crypto)?));
+
+    Ok(server_config)
 }

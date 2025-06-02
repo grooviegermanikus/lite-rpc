@@ -2,11 +2,11 @@ use crate::{
     bridge::LiteBridge, bridge_pubsub::LitePubSubBridge, rpc::LiteRpcServer,
     rpc_pubsub::LiteRpcPubSubServer,
 };
-
-use hyper::Method;
-use jsonrpsee::server::ServerBuilder;
-use solana_lite_rpc_core::AnyhowJoinHandle;
+use http::Method;
 use std::time::Duration;
+
+use jsonrpsee::server::{Server, ServerBuilder};
+use solana_lite_rpc_core::AnyhowJoinHandle;
 use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -58,10 +58,11 @@ pub async fn start_servers(
         .allow_origin(Any)
         .allow_headers(Any);
 
+    // note: this requires older version of tower
     let middleware = tower::ServiceBuilder::new().layer(cors);
 
-    let http_server_handle = ServerBuilder::default()
-        .set_middleware(middleware)
+    let http_server_handle = Server::builder()
+        .set_http_middleware(middleware)
         .max_connections(server_configuration.max_connection)
         .max_request_body_size(server_configuration.max_response_body_size)
         .max_response_body_size(server_configuration.max_response_body_size)

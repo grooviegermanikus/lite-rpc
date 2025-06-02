@@ -1,9 +1,9 @@
 [package]
 name = "solana-lite-rpc-util"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Utility for non-domain functions"
-rust-version = "1.73.0"
+rust-version = "1.84.1"
 repository = "https://github.com/blockworks-foundation/lite-rpc"
 license = "AGPL"
 
@@ -25,7 +25,6 @@ tracing = { workspace = true }
 dashmap = { workspace = true }
 quinn = { workspace = true }
 chrono = { workspace = true }
-rustls = { workspace = true }
 async-trait = { workspace = true }
 derive_more = "0.99.17"
 async-channel = { workspace = true }

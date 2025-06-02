@@ -1,5 +1,5 @@
 use anyhow::{bail, Context};
-use log::{info, warn};
+use log::{error, info, warn};
 use quinn::{Connection, ConnectionError, Endpoint};
 use std::fmt;
 use std::net::SocketAddr;
@@ -7,7 +7,6 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
 use tracing::debug;
-
 // connection manager with automatic reconnect; designated for connection to Solana TPU nodes
 //
 // assumptions:
@@ -54,7 +53,7 @@ impl AutoReconnect {
             .await
             .context("open uni stream for sending")??;
         send_stream.write_all(payload.as_slice()).await?;
-        send_stream.finish().await?;
+        send_stream.finish()?;
         Ok(())
     }
 
@@ -184,6 +183,7 @@ impl AutoReconnect {
         }
     }
 
+
     async fn create_connection(&self) -> Option<Connection> {
         let connection = self
             .endpoint
@@ -195,10 +195,11 @@ impl AutoReconnect {
             Err(ConnectionError::TimedOut) => None,
             // maybe we should also treat TransportError explicitly
             Err(unexpected_error) => {
-                panic!(
-                    "Connection to {} failed with unexpected error: {}",
+                error!(
+                    "Connection to {} failed with unexpected error: {:#}",
                     self.target_address, unexpected_error
                 );
+                None
             }
         }
     }
@@ -247,3 +248,4 @@ impl fmt::Display for AutoReconnect {
         write!(f, "Connection to {}", self.target_address,)
     }
 }
+

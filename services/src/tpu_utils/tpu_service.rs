@@ -14,10 +14,10 @@ use solana_lite_rpc_core::traits::leaders_fetcher_interface::LeaderFetcherInterf
 use solana_lite_rpc_core::types::SlotStream;
 use solana_lite_rpc_core::AnyhowJoinHandle;
 use solana_sdk::{quic::QUIC_PORT_OFFSET, signature::Keypair, slot_history::Slot};
-use solana_streamer::tls_certificates::new_dummy_x509_certificate;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use solana_tls_utils::new_dummy_x509_certificate;
 
 lazy_static::lazy_static! {
     static ref NB_CLUSTER_NODES: GenericGauge<prometheus::core::AtomicI64> =
@@ -138,6 +138,7 @@ impl TpuService {
                 let tpu_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET);
                 // let tpu_fwd1_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET + 1);
                 // let tpu_fwd16_addr = SocketAddr::new(addr.ip(), addr.port() + QUIC_PORT_OFFSET + 16);
+                // vec![(pubkey, tpu_addr), (pubkey, tpu_fwd1_addr), (pubkey, tpu_fwd16_addr)]
                 vec![(pubkey, tpu_addr)]
             })
             .collect();

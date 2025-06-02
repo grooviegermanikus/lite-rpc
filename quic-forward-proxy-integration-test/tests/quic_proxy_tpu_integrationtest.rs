@@ -17,18 +17,18 @@ use solana_sdk::signature::{Keypair, Signature, Signer};
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
 use solana_streamer::nonblocking::quic::{ConnectionPeerType, SpawnNonBlockingServerResult};
 use solana_streamer::packet::PacketBatch;
-use solana_streamer::quic::StreamStats;
 use solana_streamer::streamer::StakedNodes;
 use std::collections::{HashMap, HashSet};
 use std::net::{SocketAddr, UdpSocket};
 
 use itertools::Itertools;
-use solana_streamer::tls_certificates::new_dummy_x509_certificate;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
+use solana_streamer::quic::{QuicServerParams, StreamerStats};
+use solana_tls_utils::new_dummy_x509_certificate;
 use tokio::runtime::Builder;
 
 use tokio::task::{yield_now, JoinHandle};
@@ -36,7 +36,6 @@ use tokio::time::sleep;
 use tracing_subscriber::EnvFilter;
 
 use solana_lite_rpc_quic_forward_proxy::proxy::QuicForwardProxy;
-use solana_lite_rpc_quic_forward_proxy::tls_self_signed_pair_generator::SelfSignedTlsConfigProvider;
 use solana_lite_rpc_quic_forward_proxy::validator_identity::ValidatorIdentity;
 use solana_lite_rpc_services::quic_connection_utils::QuicConnectionParameters;
 use solana_lite_rpc_services::tpu_utils::quic_proxy_connection_manager::QuicProxyConnectionManager;
@@ -430,14 +429,18 @@ async fn solana_quic_streamer_start() {
             &keypair,
             sender,
             exit.clone(),
-            1,
+            // 1,
             staked_nodes,
-            10,
-            10,
-            9999, // max_streams_per_ms
-            10,
-            Duration::from_millis(1000),
-            Duration::from_millis(1000),
+            QuicServerParams {
+                max_connections_per_peer: MAX_QUIC_CONNECTIONS_PER_PEER,
+                max_staked_connections: 10,
+                max_unstaked_connections: 10,
+                max_streams_per_ms: 9999,
+                max_connections_per_ipaddr_per_min: 10,
+                wait_for_chunk_timeout: Duration::from_millis(1000),
+                coalesce: Duration::from_millis(1000),
+                coalesce_channel_size: 1000,
+            }
         )
         .unwrap();
 
@@ -661,13 +664,11 @@ async fn start_literpc_client_proxy_mode(
 }
 
 async fn start_quic_proxy(proxy_listen_addr: SocketAddr) -> anyhow::Result<()> {
-    let _tls_configuration = SelfSignedTlsConfigProvider::new_singleton_self_signed_localhost();
     let random_unstaked_validator_identity = ValidatorIdentity::new(None);
 
-    let tls_config = Arc::new(SelfSignedTlsConfigProvider::new_singleton_self_signed_localhost());
     let proxy_service = QuicForwardProxy::new(
         proxy_listen_addr,
-        tls_config,
+        // tls_config,
         random_unstaked_validator_identity,
     )
     .await?
@@ -685,7 +686,7 @@ struct SolanaQuicStreamer {
     sock: UdpSocket,
     exit: Arc<AtomicBool>,
     join_handler: JoinHandle<()>,
-    stats: Arc<StreamStats>,
+    stats: Arc<StreamerStats>,
 }
 
 impl SolanaQuicStreamer {
@@ -706,14 +707,17 @@ impl SolanaQuicStreamer {
                 &keypair,
                 sender,
                 exit.clone(),
-                MAX_QUIC_CONNECTIONS_PER_PEER,
                 staked_nodes,
-                10,
-                10,
-                9999, // max_streams_per_ms
-                10,
-                Duration::from_millis(1000),
-                Duration::from_millis(1000),
+                QuicServerParams {
+                    max_connections_per_peer: MAX_QUIC_CONNECTIONS_PER_PEER,
+                    max_staked_connections: 10,
+                    max_unstaked_connections: 10,
+                    max_streams_per_ms: 9999,
+                    max_connections_per_ipaddr_per_min: 10,
+                    wait_for_chunk_timeout: Duration::from_millis(1000),
+                    coalesce: Duration::from_millis(1000),
+                    coalesce_channel_size: 1000,
+                },
             )
             .unwrap();
 

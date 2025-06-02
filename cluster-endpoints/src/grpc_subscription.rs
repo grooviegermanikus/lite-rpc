@@ -87,7 +87,7 @@ pub fn from_grpc_block_update(
                     num_readonly_unsigned_accounts: header.num_readonly_unsigned_accounts as u8,
                 },
                 account_keys: account_keys.clone(),
-                recent_blockhash: Hash::new(&message.recent_blockhash),
+                recent_blockhash: Hash::new_from_array(message.recent_blockhash.try_into().unwrap()),
                 instructions: message
                     .instructions
                     .into_iter()

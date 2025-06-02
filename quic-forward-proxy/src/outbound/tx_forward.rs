@@ -1,6 +1,5 @@
 use crate::outbound::debouncer::Debouncer;
 use crate::outbound::sharder::Sharder;
-use crate::quic_util::SkipServerVerification;
 use crate::quinn_auto_reconnect::AutoReconnect;
 use crate::shared::ForwardPacket;
 use crate::util::timeout_fallback;
@@ -8,20 +7,21 @@ use crate::validator_identity::ValidatorIdentity;
 use anyhow::{bail, Context};
 use futures::future::join_all;
 use log::{debug, info, trace, warn};
-use quinn::{
-    ClientConfig, Endpoint, EndpointConfig, IdleTimeout, TokioRuntime, TransportConfig, VarInt,
-};
-use solana_lite_rpc_core::network_utils::apply_gso_workaround;
-use solana_sdk::quic::QUIC_MAX_TIMEOUT;
+use quinn::{ClientConfig, Endpoint, EndpointConfig, IdleTimeout, TokioRuntime, TransportConfig, VarInt};
+use solana_sdk::quic::{QUIC_KEEP_ALIVE, QUIC_MAX_TIMEOUT};
 use solana_streamer::nonblocking::quic::ALPN_TPU_PROTOCOL_ID;
-use solana_streamer::tls_certificates::new_dummy_x509_certificate;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use quinn::crypto::rustls::QuicClientConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use solana_tls_utils::new_dummy_x509_certificate;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::RwLock;
+use crate::quic_util::apply_gso_workaround;
+use crate::solana_tls_config::{tls_client_config_builder};
 
 const MAX_PARALLEL_STREAMS: usize = 6;
 pub const PARALLEL_TPU_CONNECTION_COUNT: usize = 4;
@@ -267,50 +267,58 @@ async fn new_endpoint_with_validator_identity(validator_identity: ValidatorIdent
         validator_identity
     );
     // the counterpart of this function is get_remote_pubkey+get_pubkey_from_tls_certificate
+    let keypair = validator_identity.get_keypair_for_tls();
     let (certificate, key) =
-        new_dummy_x509_certificate(validator_identity.get_keypair_for_tls().as_ref());
+        new_dummy_x509_certificate(keypair.as_ref());
 
     create_tpu_client_endpoint(certificate, key)
 }
 
+
 fn create_tpu_client_endpoint(
-    certificate: rustls::Certificate,
-    key: rustls::PrivateKey,
+    certificate: CertificateDer<'static>,
+    key: PrivateKeyDer<'static>,
 ) -> Endpoint {
+    const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 64 * 1024 * 1024;
+    const DATAGRAM_SEND_BUFFER_SIZE: usize = 64 * 1024 * 1024;
+    const MTU_TPU: u16 = 1280;
+    const MINIMUM_MAXIMUM_TRANSMISSION_UNIT: u16 = 1280;
+
     let mut endpoint = {
         let client_socket =
             solana_net_utils::bind_in_range(IpAddr::V4(Ipv4Addr::UNSPECIFIED), (8000, 10000))
                 .expect("create_endpoint bind_in_range")
                 .1;
-        let config = EndpointConfig::default();
+        let mut config = EndpointConfig::default();
+        config
+            .max_udp_payload_size(MINIMUM_MAXIMUM_TRANSMISSION_UNIT)
+            .expect("Should set max MTU");
         quinn::Endpoint::new(config, None, client_socket, Arc::new(TokioRuntime))
             .expect("create_endpoint quinn::Endpoint::new")
     };
 
-    let mut crypto = rustls::ClientConfig::builder()
-        .with_safe_defaults()
-        .with_custom_certificate_verifier(SkipServerVerification::new())
+    let mut config = tls_client_config_builder()
         .with_client_auth_cert(vec![certificate], key)
         .expect("Failed to set QUIC client certificates");
 
-    crypto.enable_early_data = true;
-
-    crypto.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
-
-    let mut config = ClientConfig::new(Arc::new(crypto));
+    config.enable_early_data = true;
+    config.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
 
     // note: this should be aligned with solana quic server's endpoint config
     let mut transport_config = TransportConfig::default();
-    // no remotely-initiated streams required
     transport_config.max_concurrent_uni_streams(VarInt::from_u32(0));
     transport_config.max_concurrent_bidi_streams(VarInt::from_u32(0));
     let timeout = IdleTimeout::try_from(QUIC_MAX_TIMEOUT).unwrap();
     transport_config.max_idle_timeout(Some(timeout));
-    transport_config.keep_alive_interval(Some(Duration::from_millis(500)));
+    transport_config.keep_alive_interval(Some(QUIC_KEEP_ALIVE));
+    transport_config.datagram_receive_buffer_size(Some(DATAGRAM_RECEIVE_BUFFER_SIZE));
+    transport_config.datagram_send_buffer_size(DATAGRAM_SEND_BUFFER_SIZE);
+    transport_config.min_mtu(MTU_TPU);
     apply_gso_workaround(&mut transport_config);
 
-    config.transport_config(Arc::new(transport_config));
-
+    let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));
+    config
+        .transport_config(Arc::new(transport_config));
     endpoint.set_default_client_config(config);
 
     endpoint

@@ -1,13 +1,11 @@
 use crate::cli::Args;
 use crate::proxy::QuicForwardProxy;
-use crate::tls_self_signed_pair_generator::SelfSignedTlsConfigProvider;
 use anyhow::bail;
 use clap::Parser;
 use dotenv::dotenv;
 use log::info;
-use solana_lite_rpc_core::keypair_loader::load_identity_keypair;
-use std::sync::Arc;
-
+use solana_sdk::signature::Keypair;
+use solana_sdk::signer::EncodableKey;
 use crate::validator_identity::ValidatorIdentity;
 
 pub mod cli;
@@ -18,11 +16,11 @@ pub mod proxy_request_format;
 pub mod quic_util;
 mod quinn_auto_reconnect;
 mod shared;
-pub mod tls_config_provider_client;
-pub mod tls_config_provider_server;
-pub mod tls_self_signed_pair_generator;
 mod util;
 mod validator_identity;
+mod solana_tls_config;
+mod skip_client_verification;
+mod skip_server_verification;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
 pub async fn main() -> anyhow::Result<()> {
@@ -37,11 +35,11 @@ pub async fn main() -> anyhow::Result<()> {
     let proxy_listener_addr = proxy_listen_addr.parse().unwrap();
 
     let validator_identity = ValidatorIdentity::new(
-        load_identity_keypair(Some(identity_keypair).filter(|s| !s.is_empty())).await?,
+        Some(identity_keypair).filter(|s| !s.is_empty())
+            .map(|key_file| Keypair::read_from_file(key_file).unwrap())
     );
 
-    let tls_config = Arc::new(SelfSignedTlsConfigProvider::new_singleton_self_signed_localhost());
-    let main_services = QuicForwardProxy::new(proxy_listener_addr, tls_config, validator_identity)
+    let main_services = QuicForwardProxy::new(proxy_listener_addr, validator_identity)
         .await?
         .start_services();
 

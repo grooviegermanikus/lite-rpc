@@ -2,10 +2,7 @@ use log::trace;
 use prometheus::{
     core::GenericGauge, histogram_opts, opts, register_histogram, register_int_gauge, Histogram,
 };
-use quinn::{
-    ClientConfig, Connection, ConnectionError, Endpoint, EndpointConfig, IdleTimeout, SendStream,
-    TokioRuntime, TransportConfig, VarInt,
-};
+use quinn::{ClientConfig, Connection, ConnectionError, Endpoint, EndpointConfig, IdleTimeout, SendStream, TokioRuntime, TransportConfig, VarInt, WriteError};
 use serde::{Deserialize, Serialize};
 use solana_lite_rpc_core::network_utils::apply_gso_workaround;
 use solana_sdk::pubkey::Pubkey;
@@ -14,6 +11,9 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use quinn::crypto::rustls::QuicClientConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use solana_tls_utils::SkipServerVerification;
 use tokio::{sync::broadcast, time::timeout};
 
 lazy_static::lazy_static! {
@@ -60,11 +60,17 @@ lazy_static::lazy_static! {
         register_int_gauge!(opts!("literpc_quic_connection_error_timed_out", "Number of times connection errored TimedOut")).unwrap();
     static ref NB_QUIC_CONNECTION_ERROR_LOCALLY_CLOSED: GenericGauge<prometheus::core::AtomicI64> =
         register_int_gauge!(opts!("literpc_quic_connection_error_locally_closed", "Number of times connection errored locally closed")).unwrap();
-
+    static ref NB_QUIC_CONNECTION_ERROR_CIDS_EXHAUSTED: GenericGauge<prometheus::core::AtomicI64> =
+        register_int_gauge!(opts!("literpc_quic_connection_error_cids_exhausted", "Not enough CID space available")).unwrap();
     static ref NB_QUIC_WRITE_ERROR_STOPPED: GenericGauge<prometheus::core::AtomicI64> =
         register_int_gauge!(opts!("literpc_quic_write_error_stopped", "Number of times write_error Stopped")).unwrap();
     static ref NB_QUIC_WRITE_ERROR_CONNECTION_LOST: GenericGauge<prometheus::core::AtomicI64> =
         register_int_gauge!(opts!("literpc_quic_write_error_connection_lost", "Number of times write_error ConnectionLost")).unwrap();
+    static ref NB_QUIC_WRITE_ERROR_CLOSED_STREAM: GenericGauge<prometheus::core::AtomicI64> =
+        register_int_gauge!(opts!("literpc_quic_write_error_closed_stream", "Stream already finished or reset")).unwrap();
+
+
+    // TODO remove
     static ref NB_QUIC_WRITE_ERROR_UNKNOWN_STREAM: GenericGauge<prometheus::core::AtomicI64> =
         register_int_gauge!(opts!("literpc_quic_write_error_unknown_stream", "Number of times write_error UnknownStream")).unwrap();
     static ref NB_QUIC_WRITE_ERROR_0RTT_REJECT: GenericGauge<prometheus::core::AtomicI64> =
@@ -103,7 +109,7 @@ pub struct QuicConnectionParameters {
     pub connection_timeout: Duration,
     pub unistream_timeout: Duration,
     pub write_timeout: Duration,
-    pub finalize_timeout: Duration,
+    pub finalize_timeout: Duration, // TODO remove
     pub connection_retry_count: usize,
     pub max_number_of_connections: usize,
     pub number_of_transactions_per_unistream: usize,
@@ -130,10 +136,9 @@ impl Default for QuicConnectionParameters {
 pub struct QuicConnectionUtils {}
 
 impl QuicConnectionUtils {
-    pub fn create_endpoint(certificate: rustls::Certificate, key: rustls::PrivateKey) -> Endpoint {
+    pub fn create_endpoint(certificate: CertificateDer<'static>, key: PrivateKeyDer<'static>,) -> Endpoint {
         const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 64 * 1024 * 1024;
         const DATAGRAM_SEND_BUFFER_SIZE: usize = 64 * 1024 * 1024;
-        const INITIAL_MAXIMUM_TRANSMISSION_UNIT: u16 = MINIMUM_MAXIMUM_TRANSMISSION_UNIT;
         const MINIMUM_MAXIMUM_TRANSMISSION_UNIT: u16 = 1280;
 
         let mut endpoint = {
@@ -149,15 +154,15 @@ impl QuicConnectionUtils {
                 .expect("create_endpoint quinn::Endpoint::new")
         };
 
-        let mut crypto = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_custom_certificate_verifier(Arc::new(SkipServerVerification {}))
-            .with_client_auth_cert(vec![certificate], key)
-            .unwrap();
-        crypto.enable_early_data = true;
-        crypto.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
+        let mut config = rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(SkipServerVerification::new())
+            .with_client_auth_cert(vec![certificate], key).unwrap();
 
-        let mut config = ClientConfig::new(Arc::new(crypto));
+        config.enable_early_data = true;
+        config.alpn_protocols = vec![ALPN_TPU_PROTOCOL_ID.to_vec()];
+
+        // let mut config = ClientConfig::new(Arc::new(crypto));
         let mut transport_config = TransportConfig::default();
 
         let timeout = IdleTimeout::try_from(Duration::from_secs(1)).unwrap();
@@ -165,12 +170,13 @@ impl QuicConnectionUtils {
         transport_config.keep_alive_interval(Some(Duration::from_millis(500)));
         transport_config.datagram_receive_buffer_size(Some(DATAGRAM_RECEIVE_BUFFER_SIZE));
         transport_config.datagram_send_buffer_size(DATAGRAM_SEND_BUFFER_SIZE);
-        transport_config.initial_mtu(INITIAL_MAXIMUM_TRANSMISSION_UNIT);
         transport_config.max_concurrent_bidi_streams(VarInt::from(0u8));
         transport_config.max_concurrent_uni_streams(VarInt::from(0u8));
         transport_config.min_mtu(MINIMUM_MAXIMUM_TRANSMISSION_UNIT);
         transport_config.mtu_discovery_config(None);
         apply_gso_workaround(&mut transport_config);
+        let mut config = ClientConfig::new(Arc::new(QuicClientConfig::try_from(config).unwrap()));
+
         config.transport_config(Arc::new(transport_config));
 
         endpoint.set_default_client_config(config);
@@ -211,6 +217,9 @@ impl QuicConnectionUtils {
                         ConnectionError::TimedOut => NB_QUIC_CONNECTION_ERROR_TIMEDOUT.inc(),
                         ConnectionError::LocallyClosed => {
                             NB_QUIC_CONNECTION_ERROR_LOCALLY_CLOSED.inc()
+                        }
+                        ConnectionError::CidsExhausted => {
+                            NB_QUIC_CONNECTION_ERROR_CIDS_EXHAUSTED.inc()
                         }
                     }
                     Err(e.into())
@@ -322,10 +331,13 @@ impl QuicConnectionUtils {
                         quinn::WriteError::ConnectionLost(_) => {
                             NB_QUIC_WRITE_ERROR_CONNECTION_LOST.inc()
                         }
-                        quinn::WriteError::UnknownStream => {
-                            NB_QUIC_WRITE_ERROR_UNKNOWN_STREAM.inc()
-                        }
+                        // quinn::WriteError::UnknownStream => {
+                        //     NB_QUIC_WRITE_ERROR_UNKNOWN_STREAM.inc()
+                        // }
                         quinn::WriteError::ZeroRttRejected => NB_QUIC_WRITE_ERROR_0RTT_REJECT.inc(),
+                        WriteError::ClosedStream => {
+                            NB_QUIC_WRITE_ERROR_CLOSED_STREAM.inc()
+                        }
                     };
 
                     trace!(
@@ -346,37 +358,17 @@ impl QuicConnectionUtils {
             }
         }
 
-        let timer: prometheus::HistogramTimer = TIME_TO_FINISH.start_timer();
-        let finish_timeout_res =
-            timeout(connection_params.finalize_timeout, send_stream.finish()).await;
+        let finish_timeout_res = send_stream.finish();
         match finish_timeout_res {
-            Ok(finish_res) => {
-                if let Err(e) = finish_res {
-                    match &e {
-                        quinn::WriteError::Stopped(_) => NB_QUIC_WRITE_ERROR_STOPPED.inc(),
-                        quinn::WriteError::ConnectionLost(_) => {
-                            NB_QUIC_WRITE_ERROR_CONNECTION_LOST.inc()
-                        }
-                        quinn::WriteError::UnknownStream => {
-                            NB_QUIC_WRITE_ERROR_UNKNOWN_STREAM.inc()
-                        }
-                        quinn::WriteError::ZeroRttRejected => NB_QUIC_WRITE_ERROR_0RTT_REJECT.inc(),
-                    };
-                    trace!(
+            Ok(()) => {}
+            Err(e) => {
+                trace!(
                         "Error while finishing transaction for {}, error {}",
                         identity,
                         e
                     );
-                    NB_QUIC_FINISH_ERRORED.inc();
-                    return Err(QuicConnectionError::ConnectionError { retry: false });
-                } else {
-                    timer.observe_duration();
-                }
-            }
-            Err(_) => {
-                log::debug!("timeout while finishing transaction for {}", identity);
-                NB_QUIC_FINISH_TIMEOUT.inc();
-                return Err(QuicConnectionError::TimeOut);
+                NB_QUIC_FINISH_ERRORED.inc();
+                return Err(QuicConnectionError::ConnectionError { retry: false });
             }
         }
 
@@ -395,24 +387,3 @@ impl QuicConnectionUtils {
     }
 }
 
-pub struct SkipServerVerification;
-
-impl SkipServerVerification {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self)
-    }
-}
-
-impl rustls::client::ServerCertVerifier for SkipServerVerification {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::ServerCertVerified::assertion())
-    }
-}

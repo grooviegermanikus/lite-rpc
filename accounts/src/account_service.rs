@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use anyhow::bail;
 use itertools::Itertools;
 use prometheus::{opts, register_int_gauge, IntGauge};
-use solana_account_decoder::{UiAccount, UiDataSliceConfig};
+use solana_account_decoder::{encode_ui_account, UiAccount, UiDataSliceConfig};
 use solana_lite_rpc_core::types::BlockInfoStream;
 use solana_lite_rpc_core::{
     commitment_utils::Commitment,
@@ -238,7 +238,7 @@ impl AccountService {
             .unwrap_or_default()
             .unwrap_or(solana_account_decoder::UiAccountEncoding::Base64);
         let data_slice = config.as_ref().map(|c| c.data_slice).unwrap_or_default();
-        UiAccount::encode(
+        encode_ui_account(
             &account_data.pubkey,
             account_data.account.as_ref(),
             encoding,

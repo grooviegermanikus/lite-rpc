@@ -29,7 +29,7 @@ pub fn log_gso_workaround() {
 }
 
 /// note: true means that quinn's heuristic for GSO detection is used to decide if GSO is used
-fn disable_gso() -> bool {
+pub fn disable_gso() -> bool {
     std::env::var("DISABLE_GSO")
         .unwrap_or("false".to_string())
         .parse::<bool>()

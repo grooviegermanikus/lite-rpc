@@ -57,6 +57,6 @@ pub fn hash_from_str(s: &str) -> Result<Hash, ParseHashError> {
     if bytes.len() != std::mem::size_of::<Hash>() {
         Err(ParseHashError::WrongSize)
     } else {
-        Ok(Hash::new(&bytes))
+        Ok(Hash::new_from_array(bytes.try_into().unwrap()))
     }
 }

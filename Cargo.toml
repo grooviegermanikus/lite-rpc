@@ -21,7 +21,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 authors = ["gmgalactus <gmgalactus@mango.markets>", "GroovieGermanikus <groovie@mango.markets>"]
 repository = "https://github.com/blockworks-foundation/lite-rpc"
 license = "AGPL"
@@ -29,36 +29,36 @@ edition = "2021"
 
 [workspace.dependencies]
 
-solana-lite-rpc-services = { path = "services", version="0.3.0" }
-solana-lite-rpc-core = { path = "core", version="0.3.0" }
-solana-lite-rpc-util = { path = "util", version="0.3.0" }
-solana-lite-rpc-cluster-endpoints = { path = "cluster-endpoints", version="0.3.0" }
-solana-lite-rpc-blockstore = { path = "blockstore", version="0.3.0" }
-solana-lite-rpc-stakevote = { path = "stake_vote", version="0.3.0" }
-solana-lite-rpc-prioritization-fees = { path = "prioritization_fees", version="0.3.0" }
-solana-lite-rpc-address-lookup-tables = { path = "address-lookup-tables", version="0.3.0" }
-solana-lite-rpc-accounts = { path = "accounts", version = "0.3.0"}
-solana-lite-rpc-accounts-on-demand = { path = "accounts-on-demand", version = "0.3.0"}
-bench = { path = "bench", version="0.3.0" }
+solana-lite-rpc-services = { path = "services", version="0.4.0" }
+solana-lite-rpc-core = { path = "core", version="0.4.0" }
+solana-lite-rpc-util = { path = "util", version="0.4.0" }
+solana-lite-rpc-cluster-endpoints = { path = "cluster-endpoints", version="0.4.0" }
+solana-lite-rpc-blockstore = { path = "blockstore", version="0.4.0" }
+solana-lite-rpc-stakevote = { path = "stake_vote", version="0.4.0" }
+solana-lite-rpc-prioritization-fees = { path = "prioritization_fees", version="0.4.0" }
+solana-lite-rpc-address-lookup-tables = { path = "address-lookup-tables", version="0.4.0" }
+solana-lite-rpc-accounts = { path = "accounts", version = "0.4.0"}
+solana-lite-rpc-accounts-on-demand = { path = "accounts-on-demand", version = "0.4.0"}
+bench = { path = "bench", version="0.4.0" }
 
-solana-sdk = "~2.0.16"
-solana-rpc-client = "~2.0.16"
-solana-rpc-client-api = "~2.0.16"
-solana-transaction-status = "~2.0.16"
-solana-version = "~2.0.16"
-solana-client = "~2.0.16"
-solana-net-utils = "~2.0.16"
-solana-pubsub-client = "~2.0.16"
-solana-streamer = "~2.0.16"
-solana-account-decoder = "~2.0.16"
-solana-ledger = "~2.0.16"
-solana-program = "~2.0.16"
-solana-accounts-db = "~2.0.16"
-solana-address-lookup-table-program = "~2.0.16"
+solana-sdk = "~2.2.2"
+solana-tls-utils = "~2.2.2"
+solana-rpc-client = "~2.2.2"
+solana-rpc-client-api = "~2.2.2"
+solana-transaction-status = "~2.2.2"
+solana-version = "~2.2.2"
+solana-client = "~2.2.2"
+solana-net-utils = "~2.2.2"
+solana-pubsub-client = "~2.2.2"
+solana-streamer = "~2.2.2"
+solana-account-decoder = "~2.2.2"
+solana-ledger = "~2.2.2"
+solana-program = "~2.2.2"
+solana-accounts-db = "~2.2.2"
+solana-address-lookup-table-program = "~2.2.2"
 
-yellowstone-grpc-proto = { git = "https://github.com/rpcpool/yellowstone-grpc.git", tag = "v3.0.0+solana.2.0.16" }
-geyser-grpc-connector = { git = "https://github.com/blockworks-foundation/geyser-grpc-connector.git", tag = "v0.12.1+yellowstone.3.0.0+solana.2.0" }
-
+yellowstone-grpc-proto = { git = "https://github.com/rpcpool/yellowstone-grpc.git", tag = "v6.0.0+solana.2.2.12" }
+geyser-grpc-connector = { git = "https://github.com/blockworks-foundation/geyser-grpc-connector.git", tag = "v0.13.1+yellowstone.6.0.0+solana.2.2" }
 
 itertools = "0.10.5"
 rangetools = "0.1.4"
@@ -78,24 +78,24 @@ log = "0.4.17"
 clap = { version = "4.2.4", features = ["derive", "env"] }
 dashmap = "5.4.0"
 const_env = "0.1.2"
-jsonrpsee = { version = "0.20.0", features = ["macros", "full"] }
+jsonrpsee = { version = "0.24.9", features = ["macros", "full"] }
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
 chrono = "0.4.24"
-native-tls = "0.2.11"
-postgres-native-tls = "0.5.0"
+native-tls = "0.2.14"
+postgres-native-tls = "0.5.1"
 prometheus = "0.13.3"
 lazy_static = "1.4.0"
 dotenv = "0.15.0"
 async-channel = "1.8.0"
 merge-streams = "0.1.2"
-jemallocator = "0.5"
-quinn = "0.10.2"
-quinn-proto = "0.10.5"
-rustls = { version = "0.21.7", default-features = false, features = ["quic"] }
-tonic = "0.12"
-tonic-health = "0.12"
-rcgen = "0.9.3"
+jemallocator = "0.5.4"
+quinn = "0.11.8"
+quinn-proto = "0.11.12"
+rustls = { version = "0.23.22", features = ["ring"], default-features = false }
+tonic = "0.13.1"
+tonic-health = "0.13.1"
+rcgen = "0.13.2"
 
 [patch.crates-io.curve25519-dalek]
 git = "https://github.com/anza-xyz/curve25519-dalek.git"

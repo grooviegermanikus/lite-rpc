@@ -3,44 +3,30 @@ name = "solana-lite-rpc-quic-forward-proxy"
 version = "0.1.0"
 edition = "2021"
 description = "A staked proxy for transaction forwarding to TPU nodes"
-rust-version = "1.73.0"
+rust-version = "1.84.1"
 #default-run = "lite-rpc"
 repository = "https://github.com/blockworks-foundation/lite-rpc"
 license = "AGPL"
 publish = false
 
 [dependencies]
-solana-lite-rpc-core = { workspace = true }
-solana-lite-rpc-util = { workspace = true }
-solana-sdk = { workspace = true }
-solana-streamer = { workspace = true }
-solana-transaction-status = { workspace = true }
-solana-net-utils = { workspace = true }
-rustls = { workspace = true, features = ["dangerous_configuration"]}
+solana-sdk = "~2.2.2"
+solana-streamer = "~2.2.7"
+solana-tls-utils = "~2.2.2"
+solana-net-utils = "~2.2.2"
 serde = { workspace = true }
-serde_json = { workspace = true }
 bincode = { workspace = true }
-bs58 = { workspace = true }
-base64 = { workspace = true }
-thiserror = { workspace = true }
-bytes = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
 clap = { workspace = true }
-dashmap = { workspace = true }
 itertools = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-native-tls = { workspace = true }
-prometheus = { workspace = true }
-lazy_static = { workspace = true }
 dotenv = { workspace = true }
-async-channel = { workspace = true }
-quinn = { workspace = true }
-async-trait = { workspace = true }
+rustls = { version = "0.23.22", features = ["ring"], default-features = false }
+quinn = "0.11.8"
+quinn-proto = "0.11.12"
 futures = { workspace = true }
-chrono = { workspace = true }
-tokio = { version = "1.28.2", features = ["full", "fs"]}
+tokio = { version = "1.45.0", features = ["full"]}
 rcgen = { workspace = true}
-spl-memo = "3.0.1"
 
