@@ -1,5 +1,5 @@
 use dashmap::DashMap;
-use log::{error, trace};
+use log::{error, info, trace};
 use prometheus::{
     core::GenericGauge, histogram_opts, opts, register_histogram, register_int_gauge, Histogram,
 };
@@ -78,6 +78,10 @@ impl ActiveConnection {
         addr: SocketAddr,
         identity_stakes: IdentityStakesData,
     ) {
+        info!(
+            "Starting TPU connection for {} at {} with {:?}",
+            self.identity, addr, self.connection_parameters
+        );
         let fill_notify = Arc::new(Notify::new());
 
         let identity = self.identity;
@@ -121,6 +125,7 @@ impl ActiveConnection {
                             break;
                         }
                     };
+                    info!("will send tx {:?} to tpu", tx);
                     match tx {
                         Ok(transaction_sent_info) => {
                             if data_cache
@@ -270,6 +275,10 @@ impl TpuConnectionManager {
     ) {
         NB_CONNECTIONS_TO_KEEP.set(connections_to_keep.len() as i64);
         for (identity, socket_addr) in &connections_to_keep {
+            info!(
+                "updating connection for {} at {} with {:?}",
+                identity, socket_addr, connection_parameters
+            );
             if self.identity_to_active_connection.get(identity).is_none() {
                 trace!("added a connection for {}, {}", identity, socket_addr);
                 let active_connection = ActiveConnection::new(
