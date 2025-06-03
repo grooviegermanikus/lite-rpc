@@ -86,18 +86,18 @@ async fn wire_up() -> anyhow::Result<()> {
     // race - wait for the literpc component
     // sleep(Duration::from_secs(2)).await;
 
+    let send_tx_broadcast = broadcast_sender.clone();
     tokio::spawn(async move {
         let broadcast_start_at = Instant::now();
         // note: this must fast and should not block
         for i in 0..test_case_params.sample_tx_count {
             let raw_sample_tx = build_raw_sample_tx(i);
             trace!(
-                "broadcast transaction {} to {} receivers: {}",
+                "broadcast transaction {}: {}",
                 raw_sample_tx.signature,
-                broadcast_sender.receiver_count(),
                 format!("hi {}", i)
             );
-            broadcast_sender.send(raw_sample_tx).unwrap();
+            send_tx_broadcast.send(raw_sample_tx).unwrap();
         }
         debug!(
             "broadcasted {} transactions in {:?}ms",
@@ -113,8 +113,10 @@ async fn wire_up() -> anyhow::Result<()> {
 
     let mut received_messages: HashSet<u64> = HashSet::new();
     'tx_from_streamer_loop: loop {
-        match rx.recv().await {
-            Some(packet_batch) => {
+        use tokio::time::timeout;
+
+        match timeout(Duration::from_millis(500), rx.recv()).await {
+            Ok(Some(packet_batch)) => {
                 info!("received packet batch with {} packets", packet_batch.len());
                 for packet in packet_batch.iter() {
                     let tx = packet
@@ -129,20 +131,34 @@ async fn wire_up() -> anyhow::Result<()> {
                         tx.get_signature(),
                         content);
                 }
-
             }
-            None => {
-                // this will never happen actually
+            Ok(None) => {
                 warn!("rx channel from streamer closed");
                 unreachable!();
             }
+            Err(_timeout) => {
+                info!("txs received: {}", received_messages.len());
+                // TODO check if we have received all transactions
+                warn!("Timeout while waiting for packet batch");
+                break 'tx_from_streamer_loop;
+            }
         }
     }
-
     assert_eq!(
         broadcast_sender.len(), 0,
         "broadcast channel must be empty"
     );
+
+    // evaluate received messagesd
+    if received_messages.len() != test_case_params.sample_tx_count as usize {
+        assert_eq!(
+            received_messages.len() as u32,
+            test_case_params.sample_tx_count,
+            "Must have received all transactions"
+        );
+    }
+
+    info!("Received all {} transactions", test_case_params.sample_tx_count);
 
     Ok(())
 }
@@ -275,6 +291,7 @@ pub async fn test_simple() {
         .with_max_level(tracing::Level::DEBUG).try_init();
     info!("Starting QUIC forward proxy integration test...");
 
+    // make sure that tokio is never blocked
     tokio::spawn(async move {
         // keep the streamer running
         loop {
@@ -416,7 +433,7 @@ fn parse_hi(input: &str) -> Option<(u64, u64)> {
     let counter = groups.get(1).unwrap().as_str().parse::<u64>().ok()?;
     let epoch_us = groups.get(2).unwrap().as_str().parse::<u64>().ok()?;
     Some((counter, epoch_us))
-}f
+}
 
 fn create_memo_tx(msg: &[u8], payer: &Keypair, blockhash: Hash) -> Transaction {
     let memo = Pubkey::from_str(MEMO_PROGRAM_ID).unwrap();
