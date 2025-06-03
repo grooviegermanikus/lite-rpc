@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::net::{SocketAddr, UdpSocket};
 use std::str::FromStr;
@@ -6,7 +6,8 @@ use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, SystemTime};
 use crossbeam_channel;
-use log::{error, info, trace, warn};
+use log::{debug, error, info, trace, warn};
+use regex::{Captures, Regex};
 use solana_sdk::hash::Hash;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::message::Message;
@@ -21,7 +22,7 @@ use solana_tls_utils::new_dummy_x509_certificate;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
+use tokio::time::{sleep, Instant};
 use solana_lite_rpc_core::solana_utils::SerializableTransaction;
 use solana_lite_rpc_core::stores::data_cache::DataCache;
 use solana_lite_rpc_core::structures::identity_stakes::IdentityStakesData;
@@ -76,25 +77,6 @@ async fn wire_up() -> anyhow::Result<()> {
 
     start_crossbeam_bridge_thread(tx_from_streamer_receiver,tx);
 
-    tokio::spawn(async move {
-        // keep the streamer running
-        loop {
-            match rx.recv().await {
-                Some(packet_batch) => {
-                    info!("received packet batch with {} packets", packet_batch.len());
-                }
-                None => {
-                    warn!("rx channel closed, exiting streamer thread");
-                    break;
-                }
-            }
-
-            // sleep(Duration::from_secs(1800)).await;
-            std::thread::sleep(Duration::from_secs(1800));
-            info!("Streamer is running...");
-        }
-    });
-
     let broadcast_sender = spawn_literpc_client_direct_mode(
         test_case_params,
         streamer_listen_address,
@@ -102,32 +84,65 @@ async fn wire_up() -> anyhow::Result<()> {
         .await?;
 
     // race - wait for the literpc component
+    // sleep(Duration::from_secs(2)).await;
+
+    tokio::spawn(async move {
+        let broadcast_start_at = Instant::now();
+        // note: this must fast and should not block
+        for i in 0..test_case_params.sample_tx_count {
+            let raw_sample_tx = build_raw_sample_tx(i);
+            trace!(
+                "broadcast transaction {} to {} receivers: {}",
+                raw_sample_tx.signature,
+                broadcast_sender.receiver_count(),
+                format!("hi {}", i)
+            );
+            broadcast_sender.send(raw_sample_tx).unwrap();
+        }
+        debug!(
+            "broadcasted {} transactions in {:?}ms",
+            test_case_params.sample_tx_count,
+            broadcast_start_at.elapsed().as_secs_f64() * 1000.0
+        );
+    });
+
+    // race2 - let the system soak up the transactions
     sleep(Duration::from_secs(2)).await;
 
-    for i in 0..test_case_params.sample_tx_count {
-        let raw_sample_tx = build_raw_sample_tx(i);
-        trace!(
-            "broadcast transaction {} to {} receivers: {}",
-            raw_sample_tx.signature,
-            broadcast_sender.receiver_count(),
-            format!("hi {}", i)
-        );
+    info!("Everything is in place, starting to receive packets from streamer...");
 
-        broadcast_sender.send(raw_sample_tx)?;
+    let mut received_messages: HashSet<u64> = HashSet::new();
+    'tx_from_streamer_loop: loop {
+        match rx.recv().await {
+            Some(packet_batch) => {
+                info!("received packet batch with {} packets", packet_batch.len());
+                for packet in packet_batch.iter() {
+                    let tx = packet
+                        .deserialize_slice::<VersionedTransaction, _>(..)
+                        .unwrap();
+                    let content = String::from_utf8(tx.message.instructions()[0].data.clone()).unwrap();
+                    // "hi 1 @1748886442000"
+                    let (tx_counter, _epoch_us) = parse_hi(&content).unwrap();
+                    let was_inserted = received_messages.insert(tx_counter);
+                    assert!(was_inserted,
+                        "Received duplicate transaction {}: {}",
+                        tx.get_signature(),
+                        content);
+                }
+
+            }
+            None => {
+                // this will never happen actually
+                warn!("rx channel from streamer closed");
+                unreachable!();
+            }
+        }
     }
 
-    while !broadcast_sender.is_empty() {
-        sleep(Duration::from_millis(1000)).await;
-        warn!("broadcast channel is not empty - wait before shutdown test client thread");
-    }
-
-    assert!(
-        broadcast_sender.is_empty(),
+    assert_eq!(
+        broadcast_sender.len(), 0,
         "broadcast channel must be empty"
     );
-
-    sleep(Duration::from_secs(5)).await;
-
 
     Ok(())
 }
@@ -245,7 +260,8 @@ async fn spawn_literpc_client_direct_mode(
         //     prioritization_fee: 0,
         // }).unwrap();
         // sleep to avoid busy loop
-        sleep(Duration::from_secs(1800)).await;
+        sleep(Duration::from_secs(20)).await;
+        info!("TpuConnectionManager shutting down after n seconds");
     });
 
     info!("checkpoint2");
@@ -393,6 +409,14 @@ fn build_sample_tx(payer_keypair: &Keypair, i: u32) -> VersionedTransaction {
     let epoch_us = epoch_us as u64;
     create_memo_tx(format!("hi {} @{}", i, epoch_us).as_bytes(), payer_keypair, blockhash).into()
 }
+
+fn parse_hi(input: &str) -> Option<(u64, u64)> {
+    let re = Regex::new(r"hi (\d+) @(\d+)").unwrap();
+    let groups: Captures = re.captures(&input).unwrap();
+    let counter = groups.get(1).unwrap().as_str().parse::<u64>().ok()?;
+    let epoch_us = groups.get(2).unwrap().as_str().parse::<u64>().ok()?;
+    Some((counter, epoch_us))
+}f
 
 fn create_memo_tx(msg: &[u8], payer: &Keypair, blockhash: Hash) -> Transaction {
     let memo = Pubkey::from_str(MEMO_PROGRAM_ID).unwrap();
