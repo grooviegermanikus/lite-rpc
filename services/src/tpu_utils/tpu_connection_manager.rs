@@ -150,9 +150,10 @@ impl ActiveConnection {
                         }
                         Err(e) => {
                             error!(
-                                "Broadcast channel error on recv for {} error {} - continue",
+                                "Broadcast channel error on recv for {} error {} - delay + continue",
                                 identity, e
                             );
+                            tokio::time::sleep(Duration::from_millis(50)).await;
                             continue;
                         }
                     };
